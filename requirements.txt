@@ -1,5 +1,16 @@
-streamlit
-pandas
-ccxt
-plotly
-streamlit-autorefresh
+# Core framework
+streamlit>=1.39.0
+
+# Interactive table (sorting, grouping, filtering, export)
+streamlit-aggrid>=0.3.4.post3
+
+# Data handling
+pandas>=2.2.0
+numpy>=1.26.0
+python-dateutil>=2.9.0
+
+# Exchange API
+ccxt>=4.3.0
+
+# Auto-refresh helper
+streamlit-autorefresh>=0.0.1
