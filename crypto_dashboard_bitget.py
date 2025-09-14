@@ -2,25 +2,24 @@ import streamlit as st
 import pandas as pd
 import ccxt
 import json
-import time
 import plotly.graph_objects as go
+from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(page_title="Crypto Dashboard", layout="wide")
 
-# Refresh every 5 minutes (300 seconds)
-st_autorefresh = st.experimental_rerun
-st.sidebar.markdown("⏳ Auto-refresh every 5 minutes")
+# 🔄 Auto-refresh every 5 minutes (300000 ms)
+st_autorefresh(interval=300000, key="crypto_refresh")
 
-# Load coins
+# Load coin list
 with open("coins.json") as f:
     COINS = json.load(f)
 
-# Bitget exchange (public data only)
+# Bitget exchange
 exchange = ccxt.bitget({"enableRateLimit": True})
 
 st.title("📊 Crypto Dashboard (15m candles)")
 
-# Fetch OHLCV
+# --- Fetch OHLCV ---
 def fetch_ohlcv(symbol, limit=3000):
     try:
         data = exchange.fetch_ohlcv(symbol, timeframe="15m", limit=limit)
@@ -30,7 +29,7 @@ def fetch_ohlcv(symbol, limit=3000):
     except Exception:
         return None
 
-# Compute stats
+# --- Compute Stats ---
 def compute_stats(df):
     now = df["close"].iloc[-1]
     periods = {
@@ -52,6 +51,7 @@ def compute_stats(df):
             stats[f"Low_{label}"] = None
     return stats
 
+# --- Collect Data ---
 results = []
 for coin in COINS:
     symbol = coin.replace("USDT", "/USDT")
@@ -59,7 +59,7 @@ for coin in COINS:
     if df is not None:
         stats = compute_stats(df)
         stats["Symbol"] = coin
-        stats["Data"] = df  # keep df for chart
+        stats["Data"] = df  # keep df for charts
         results.append(stats)
 
 if results:
@@ -86,10 +86,11 @@ if results:
             "Signal"]
     df = df[cols]
 
-    # Format numbers (remove trailing zeros)
+    # Format numbers (remove unnecessary zeros, keep precision)
     df = df.applymap(lambda x: round(x, 4) if isinstance(x, (int, float)) else x)
 
     # Show dataframe
+    st.subheader("📋 Market Stats")
     st.dataframe(df, use_container_width=True, height=600)
 
     # Charts + analysis for each coin
@@ -98,6 +99,7 @@ if results:
         coin = row["Symbol"]
         data = results[i]["Data"]
 
+        # Create candlestick chart
         fig = go.Figure()
         fig.add_trace(go.Candlestick(
             x=data["timestamp"],
