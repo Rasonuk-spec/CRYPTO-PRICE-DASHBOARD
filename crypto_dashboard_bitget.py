@@ -21,7 +21,7 @@ st.title("📊 Crypto Dashboard (24H candles)")
 
 
 # --- Fetch OHLCV ---
-def fetch_ohlcv(symbol, limit=2000):
+def fetch_ohlcv(symbol, limit=5000):  # ✅ fetch more candles (cover 2M)
     try:
         data = exchange.fetch_ohlcv(symbol, timeframe="1h", limit=limit)
         df = pd.DataFrame(
@@ -111,10 +111,11 @@ if results:
     # Round numbers
     df = df.applymap(lambda x: round(x, 4) if isinstance(x, (int, float)) else x)
 
-    # --- AgGrid Config ---
+    # --- AgGrid Config (NO sorting, NO filter, Auto-fit) ---
     gb = GridOptionsBuilder.from_dataframe(df)
     gb.configure_default_column(
-        sortable=True,
+        sortable=False,  # ❌ no sorting
+        filter=False,    # ❌ no filtering
         resizable=True,
         autoSizeColumns=True,
         wrapText=True,
@@ -122,16 +123,15 @@ if results:
     gb.configure_column("Symbol", pinned="left")
     gb.configure_column("Current", pinned="left")
 
-    # Enable export + search
+    # Only export + search enabled
     gb.configure_grid_options(
         domLayout="normal",
-        enableRangeSelection=True,
-        suppressRowClickSelection=False,
+        enableRangeSelection=False,
+        suppressRowClickSelection=True,
         quickFilter=True,
     )
-    gb.configure_side_bar()
-
     grid_options = gb.build()
+
     # ✅ remove flex so columns don’t stretch
     if "flex" in grid_options["defaultColDef"]:
         del grid_options["defaultColDef"]["flex"]
@@ -144,11 +144,11 @@ if results:
     grid_options["quickFilterText"] = search_query
 
     # --- Render AgGrid ---
-    st.subheader("📋 Market Stats (Auto-fit columns, Sortable, Exportable, Searchable)")
+    st.subheader("📋 Market Stats (Auto-fit, Exportable, Searchable)")
     AgGrid(
         df,
         gridOptions=grid_options,
-        fit_columns_on_grid_load=True,  # ✅ auto-fit to content
+        fit_columns_on_grid_load=True,  # ✅ shrink to fit content
         theme="balham",
         height=600,
     )
