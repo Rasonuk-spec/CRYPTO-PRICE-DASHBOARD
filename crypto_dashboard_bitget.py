@@ -113,7 +113,12 @@ if results:
 
     # --- AgGrid Config ---
     gb = GridOptionsBuilder.from_dataframe(df)
-    gb.configure_default_column(sortable=True, filter=True, resizable=True)
+    gb.configure_default_column(
+        sortable=True,
+        resizable=True,
+        autoSizeColumns=True,
+        wrapText=True,
+    )
     gb.configure_column("Symbol", pinned="left")
     gb.configure_column("Current", pinned="left")
 
@@ -127,19 +132,23 @@ if results:
     gb.configure_side_bar()
 
     grid_options = gb.build()
-    grid_options["defaultColDef"]["flex"] = 1
+    # ✅ remove flex so columns don’t stretch
+    if "flex" in grid_options["defaultColDef"]:
+        del grid_options["defaultColDef"]["flex"]
+
+    grid_options["defaultColDef"]["autoSizeAllColumns"] = True
     grid_options["enableExport"] = True
 
     # --- Search box ---
     search_query = st.text_input("🔍 Search Symbol:", "")
     grid_options["quickFilterText"] = search_query
 
-    # --- Render AgGrid (SAFE for Streamlit Cloud) ---
-    st.subheader("📋 Market Stats (Sortable, Exportable, Searchable)")
+    # --- Render AgGrid ---
+    st.subheader("📋 Market Stats (Auto-fit columns, Sortable, Exportable, Searchable)")
     AgGrid(
         df,
         gridOptions=grid_options,
-        fit_columns_on_grid_load=True,
+        fit_columns_on_grid_load=True,  # ✅ auto-fit to content
         theme="balham",
         height=600,
     )
