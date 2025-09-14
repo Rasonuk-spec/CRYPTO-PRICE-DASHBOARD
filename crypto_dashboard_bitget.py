@@ -21,7 +21,7 @@ st.title("📊 Crypto Dashboard (24H candles)")
 
 
 # --- Fetch OHLCV ---
-def fetch_ohlcv(symbol, limit=5000):  # ✅ fetch more candles (cover 2M)
+def fetch_ohlcv(symbol, limit=5000):
     try:
         data = exchange.fetch_ohlcv(symbol, timeframe="1h", limit=limit)
         df = pd.DataFrame(
@@ -111,19 +111,20 @@ if results:
     # Round numbers
     df = df.applymap(lambda x: round(x, 4) if isinstance(x, (int, float)) else x)
 
-    # --- AgGrid Config (NO sorting, NO filter, Auto-fit) ---
+    # --- AgGrid Config (NO filter, NO sort, NO menu, Auto-fit) ---
     gb = GridOptionsBuilder.from_dataframe(df)
     gb.configure_default_column(
-        sortable=False,  # ❌ no sorting
-        filter=False,    # ❌ no filtering
+        sortable=False,     # ❌ disable sorting
+        filter=False,       # ❌ disable filtering
         resizable=True,
-        autoSizeColumns=True,
+        suppressMenu=True,  # ❌ disable menu button
         wrapText=True,
+        autoHeight=True,
     )
     gb.configure_column("Symbol", pinned="left")
     gb.configure_column("Current", pinned="left")
 
-    # Only export + search enabled
+    # Grid options
     gb.configure_grid_options(
         domLayout="normal",
         enableRangeSelection=False,
@@ -132,23 +133,20 @@ if results:
     )
     grid_options = gb.build()
 
-    # ✅ remove flex so columns don’t stretch
-    if "flex" in grid_options["defaultColDef"]:
-        del grid_options["defaultColDef"]["flex"]
+    # ✅ Auto-size columns when data is first rendered
+    grid_options["onFirstDataRendered"] = {
+        "function": "params.api.sizeColumnsToFit(); params.api.autoSizeAllColumns();"
+    }
 
-    grid_options["defaultColDef"]["autoSizeAllColumns"] = True
-    grid_options["enableExport"] = True
-
-    # --- Search box ---
-    search_query = st.text_input("🔍 Search Symbol:", "")
-    grid_options["quickFilterText"] = search_query
+    # --- Search box (updates live) ---
+    search_query = st.text_input("🔍 Search Symbol:", value="", key="search")
+    grid_options["quickFilterText"] = st.session_state["search"]
 
     # --- Render AgGrid ---
-    st.subheader("📋 Market Stats (Auto-fit, Exportable, Searchable)")
+    st.subheader("📋 Market Stats (Clean, Auto-fit, Exportable, Searchable)")
     AgGrid(
         df,
         gridOptions=grid_options,
-        fit_columns_on_grid_load=True,  # ✅ shrink to fit content
         theme="balham",
         height=600,
     )
