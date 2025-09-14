@@ -113,48 +113,9 @@ if results:
 
     # --- AgGrid Config ---
     gb = GridOptionsBuilder.from_dataframe(df)
-
-    # Enable sorting/filtering/resizing
     gb.configure_default_column(sortable=True, filter=True, resizable=True)
-
-    # Pin Symbol + Current
     gb.configure_column("Symbol", pinned="left")
     gb.configure_column("Current", pinned="left")
-
-    # Conditional formatting for % Change
-    def cell_style(params):
-        try:
-            val = float(params.value)
-            if val > 0:
-                return {"color": "green", "fontWeight": "bold"}
-            elif val < 0:
-                return {"color": "red", "fontWeight": "bold"}
-        except:
-            return {"color": "black"}
-        return {"color": "black"}
-
-    for col in ["%_vs_1W", "%_vs_1M", "%_vs_2M"]:
-        gb.configure_column(col, cellStyle=cell_style)
-
-    # --- Column Grouping (Multi-level headers) ---
-    gb.configure_column("Avg_24H", header_name="24H", parent="Avg Values")
-    gb.configure_column("Avg_1W", header_name="1W", parent="Avg Values")
-    gb.configure_column("Avg_1M", header_name="1M", parent="Avg Values")
-    gb.configure_column("Avg_2M", header_name="2M", parent="Avg Values")
-
-    gb.configure_column("High_24H", header_name="24H", parent="High Values")
-    gb.configure_column("High_1W", header_name="1W", parent="High Values")
-    gb.configure_column("High_1M", header_name="1M", parent="High Values")
-    gb.configure_column("High_2M", header_name="2M", parent="High Values")
-
-    gb.configure_column("Low_24H", header_name="24H", parent="Low Values")
-    gb.configure_column("Low_1W", header_name="1W", parent="Low Values")
-    gb.configure_column("Low_1M", header_name="1M", parent="Low Values")
-    gb.configure_column("Low_2M", header_name="2M", parent="Low Values")
-
-    gb.configure_column("%_vs_1W", header_name="vs 1W %", parent="% Change")
-    gb.configure_column("%_vs_1M", header_name="vs 1M %", parent="% Change")
-    gb.configure_column("%_vs_2M", header_name="vs 2M %", parent="% Change")
 
     # Enable export + search
     gb.configure_grid_options(
@@ -164,6 +125,7 @@ if results:
         quickFilter=True,
     )
     gb.configure_side_bar()
+
     grid_options = gb.build()
     grid_options["defaultColDef"]["flex"] = 1
     grid_options["enableExport"] = True
@@ -172,14 +134,12 @@ if results:
     search_query = st.text_input("🔍 Search Symbol:", "")
     grid_options["quickFilterText"] = search_query
 
-    # --- Render AgGrid (safer config for Cloud) ---
-    st.subheader("📋 Market Stats (Grouped, Sortable, Styled, Exportable, Searchable)")
+    # --- Render AgGrid (SAFE for Streamlit Cloud) ---
+    st.subheader("📋 Market Stats (Sortable, Exportable, Searchable)")
     AgGrid(
         df,
         gridOptions=grid_options,
         fit_columns_on_grid_load=True,
-        enable_enterprise_modules=False,  # ✅ more stable on Cloud
-        allow_unsafe_jscode=True,
         theme="balham",
         height=600,
     )
