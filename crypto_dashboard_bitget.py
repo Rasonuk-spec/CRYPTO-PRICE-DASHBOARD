@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import ccxt
 import json
+import numpy as np
 from streamlit_autorefresh import st_autorefresh
 from st_aggrid import AgGrid, GridOptionsBuilder
 
@@ -106,71 +107,46 @@ if results:
         ]
     ]
 
-    # Round numbers
-    df = df.applymap(lambda x: round(x, 4) if isinstance(x, (int, float)) else x)
+    # --- Sanitize values (prevent NaN/Inf crashes) ---
+    df = df.replace([np.inf, -np.inf], None)   # remove infinity
+    df = df.fillna("-")                        # replace NaN/None with dash
 
-    # --- AgGrid Config ---
+    # Round numbers where possible
+    def safe_round(x):
+        if isinstance(x, (int, float)):
+            return round(x, 4)
+        return x
+
+    df = df.applymap(safe_round)
+
+    # --- AgGrid Config (SAFE) ---
     gb = GridOptionsBuilder.from_dataframe(df)
-
-    # Disable sorting/filter/menu globally
     gb.configure_default_column(
         sortable=False,
         filter=False,
         resizable=True,
         suppressMenu=True,
         autoSizeColumns=True,
-        wrapHeaderText=True,
-        autoHeaderHeight=True,
     )
-
-    # Symbol and Current pinned left
     gb.configure_column("Symbol", pinned="left")
     gb.configure_column("Current", pinned="left", cellStyle={"fontWeight": "bold"})
 
-    # Conditional formatting for % changes with arrows
-    pct_formatter = """function(params) {
-        if (params.value == null) return "-";
-        if (params.value > 0) return params.value + "% ↑";
-        if (params.value < 0) return params.value + "% ↓";
-        return params.value + "%";
-    }"""
-
-    pct_style = """function(params) {
-        if (params.value > 10) {return {color: 'green', fontWeight: 'bold'};}
-        if (params.value < -10) {return {color: 'red', fontWeight: 'bold'};}
-        if (params.value > 0) {return {color: 'green'};}
-        if (params.value < 0) {return {color: 'red'};}
-        return {};
-    }"""
-
-    gb.configure_column("%_vs_1W", valueFormatter=pct_formatter, cellStyle=pct_style)
-    gb.configure_column("%_vs_1M", valueFormatter=pct_formatter, cellStyle=pct_style)
-
-    # Ever High/Low highlighting
-    gb.configure_column("Ever_High", cellStyle={"backgroundColor": "#fff7b2"})
-    gb.configure_column("Ever_Low", cellStyle={"backgroundColor": "#cce5ff"})
-
-    # Apply config
     grid_options = gb.build()
 
-    # --- Live Search ---
-    search_query = st.text_input("🔍 Search Symbol:", value="", key="search")
-    grid_options["quickFilterText"] = st.session_state["search"]
-
-    # --- Render AgGrid ---
+    # --- Render AgGrid (NO JS, STABLE) ---
     st.subheader("📋 Market Stats")
     AgGrid(
         df,
         gridOptions=grid_options,
         theme="balham",
         height=600,
-        fit_columns_on_grid_load=True,   # ✅ safe auto-fit
-        allow_unsafe_jscode=True,
+        fit_columns_on_grid_load=True,
+        allow_unsafe_jscode=False,   # ✅ SAFE, no custom JS
         enable_enterprise_modules=False,
         update_mode="NO_UPDATE",
     )
 
-    # Extra CSV Export Button
+    # CSV Export
     st.download_button(
         "📥 Download CSV",
         df.to_csv(index=False).encode("utf-8"),
