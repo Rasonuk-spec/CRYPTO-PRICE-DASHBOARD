@@ -107,11 +107,10 @@ if results:
         ]
     ]
 
-    # --- Sanitize values (prevent NaN/Inf crashes) ---
-    df = df.replace([np.inf, -np.inf], None)   # remove infinity
-    df = df.fillna("-")                        # replace NaN/None with dash
+    # --- Sanitize values ---
+    df = df.replace([np.inf, -np.inf], None)
+    df = df.fillna("-")
 
-    # Round numbers where possible
     def safe_round(x):
         if isinstance(x, (int, float)):
             return round(x, 4)
@@ -119,29 +118,63 @@ if results:
 
     df = df.applymap(safe_round)
 
-    # --- AgGrid Config (SAFE) ---
+    # --- AgGrid Config ---
     gb = GridOptionsBuilder.from_dataframe(df)
+
+    # Disable sorting/filter/menu globally (🚫 no funnels/arrows!)
     gb.configure_default_column(
         sortable=False,
         filter=False,
         resizable=True,
         suppressMenu=True,
         autoSizeColumns=True,
+        wrapHeaderText=True,
+        autoHeaderHeight=True,
     )
+
+    # Pin Symbol and Current
     gb.configure_column("Symbol", pinned="left")
     gb.configure_column("Current", pinned="left", cellStyle={"fontWeight": "bold"})
 
+    # --- Highlights ---
+    pct_formatter = """function(params) {
+        if (params.value == null || params.value === "-") return "-";
+        if (params.value > 0) return params.value + "% ↑";
+        if (params.value < 0) return params.value + "% ↓";
+        return params.value + "%";
+    }"""
+
+    pct_style = """function(params) {
+        if (params.value === "-" || params.value == null) return {};
+        if (params.value > 10) {return {color: 'green', fontWeight: 'bold'};}
+        if (params.value < -10) {return {color: 'red', fontWeight: 'bold'};}
+        if (params.value > 0) {return {color: 'green'};}
+        if (params.value < 0) {return {color: 'red'};}
+        return {};
+    }"""
+
+    gb.configure_column("%_vs_1W", valueFormatter=pct_formatter, cellStyle=pct_style)
+    gb.configure_column("%_vs_1M", valueFormatter=pct_formatter, cellStyle=pct_style)
+
+    gb.configure_column("Ever_High", cellStyle={"backgroundColor": "#fff7b2"})
+    gb.configure_column("Ever_Low", cellStyle={"backgroundColor": "#cce5ff"})
+
+    # Build config
     grid_options = gb.build()
 
-    # --- Render AgGrid (NO JS, STABLE) ---
+    # --- Search Box ---
+    search_query = st.text_input("🔍 Search Symbol:", value="")
+    grid_options["quickFilterText"] = search_query
+
+    # --- Render AgGrid ---
     st.subheader("📋 Market Stats")
     AgGrid(
         df,
         gridOptions=grid_options,
         theme="balham",
         height=600,
-        fit_columns_on_grid_load=True,
-        allow_unsafe_jscode=False,   # ✅ SAFE, no custom JS
+        fit_columns_on_grid_load=True,   # ✅ auto adjust width
+        allow_unsafe_jscode=True,        # ✅ allow highlights
         enable_enterprise_modules=False,
         update_mode="NO_UPDATE",
     )
