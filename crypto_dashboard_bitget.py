@@ -17,11 +17,11 @@ with open("coins.json") as f:
 # Bitget exchange
 exchange = ccxt.bitget({"enableRateLimit": True})
 
-st.title("📊 Crypto Dashboard (24H candles)")
+st.title("📊 Crypto Dashboard")
 
 
 # --- Fetch OHLCV ---
-def fetch_ohlcv(symbol, limit=5000):
+def fetch_ohlcv(symbol, limit=2000):
     try:
         data = exchange.fetch_ohlcv(symbol, timeframe="1h", limit=limit)
         df = pd.DataFrame(
@@ -40,7 +40,6 @@ def compute_stats(df):
         "24H": 24,
         "1W": 7 * 24,
         "1M": 30 * 24,
-        "2M": 60 * 24,
     }
     stats = {"Current": now}
     for label, length in periods.items():
@@ -53,6 +52,10 @@ def compute_stats(df):
             stats[f"Avg_{label}"] = None
             stats[f"High_{label}"] = None
             stats[f"Low_{label}"] = None
+
+    # Always include Ever High / Low
+    stats["Ever_High"] = df["high"].max()
+    stats["Ever_Low"] = df["low"].min()
     return stats
 
 
@@ -81,9 +84,6 @@ if results:
     df["%_vs_1M"] = df.apply(
         lambda r: percent_change(r["Current"], r["Avg_1M"]), axis=1
     )
-    df["%_vs_2M"] = df.apply(
-        lambda r: percent_change(r["Current"], r["Avg_2M"]), axis=1
-    )
 
     # --- Reorder columns ---
     df = df[
@@ -93,57 +93,74 @@ if results:
             "Avg_24H",
             "Avg_1W",
             "Avg_1M",
-            "Avg_2M",
             "High_24H",
             "High_1W",
             "High_1M",
-            "High_2M",
             "Low_24H",
             "Low_1W",
             "Low_1M",
-            "Low_2M",
+            "Ever_High",
+            "Ever_Low",
             "%_vs_1W",
             "%_vs_1M",
-            "%_vs_2M",
         ]
     ]
 
     # Round numbers
     df = df.applymap(lambda x: round(x, 4) if isinstance(x, (int, float)) else x)
 
-    # --- AgGrid Config (NO filter, NO sort, NO menu, Auto-fit) ---
+    # --- AgGrid Config ---
     gb = GridOptionsBuilder.from_dataframe(df)
-    gb.configure_default_column(
-        sortable=False,     # ❌ disable sorting
-        filter=False,       # ❌ disable filtering
-        resizable=True,
-        suppressMenu=True,  # ❌ disable menu button
-        wrapText=True,
-        autoHeight=True,
-    )
-    gb.configure_column("Symbol", pinned="left")
-    gb.configure_column("Current", pinned="left")
 
-    # Grid options
-    gb.configure_grid_options(
-        domLayout="normal",
-        enableRangeSelection=False,
-        suppressRowClickSelection=True,
-        quickFilter=True,
+    # Disable sorting/filter/menu globally
+    gb.configure_default_column(
+        sortable=False,
+        filter=False,
+        resizable=True,
+        suppressMenu=True,
+        suppressMovable=True,
     )
+
+    # Symbol and Current pinned left
+    gb.configure_column("Symbol", pinned="left")
+    gb.configure_column("Current", pinned="left", cellStyle={"fontWeight": "bold"})
+
+    # Conditional formatting for % changes with arrows
+    pct_formatter = """function(params) {
+        if (params.value == null) return "-";
+        if (params.value > 0) return params.value + "% ↑";
+        if (params.value < 0) return params.value + "% ↓";
+        return params.value + "%";
+    }"""
+
+    pct_style = """function(params) {
+        if (params.value > 10) {return {color: 'green', fontWeight: 'bold'};}
+        if (params.value < -10) {return {color: 'red', fontWeight: 'bold'};}
+        if (params.value > 0) {return {color: 'green'};}
+        if (params.value < 0) {return {color: 'red'};}
+        return {};
+    }"""
+
+    gb.configure_column("%_vs_1W", valueFormatter=pct_formatter, cellStyle=pct_style)
+    gb.configure_column("%_vs_1M", valueFormatter=pct_formatter, cellStyle=pct_style)
+
+    # Ever High/Low highlighting
+    gb.configure_column("Ever_High", cellStyle={"backgroundColor": "#fff7b2"})
+    gb.configure_column("Ever_Low", cellStyle={"backgroundColor": "#cce5ff"})
+
     grid_options = gb.build()
 
-    # ✅ Auto-size columns when data is first rendered
+    # Auto-size columns
     grid_options["onFirstDataRendered"] = {
-        "function": "params.api.sizeColumnsToFit(); params.api.autoSizeAllColumns();"
+        "function": "params.api.autoSizeAllColumns();"
     }
 
-    # --- Search box (updates live) ---
+    # --- Live Search ---
     search_query = st.text_input("🔍 Search Symbol:", value="", key="search")
     grid_options["quickFilterText"] = st.session_state["search"]
 
     # --- Render AgGrid ---
-    st.subheader("📋 Market Stats (Clean, Auto-fit, Exportable, Searchable)")
+    st.subheader("📋 Market Stats")
     AgGrid(
         df,
         gridOptions=grid_options,
