@@ -86,6 +86,19 @@ if results:
         lambda r: percent_change(r["Current"], r["Avg_1M"]), axis=1
     )
 
+    # --- Format % values with arrows ---
+    def format_pct(val):
+        if val is None or val == "-":
+            return "-"
+        if val > 0:
+            return f"{val:.2f}% ↑"
+        if val < 0:
+            return f"{val:.2f}% ↓"
+        return f"{val:.2f}%"
+
+    df["%_vs_1W"] = df["%_vs_1W"].apply(format_pct)
+    df["%_vs_1M"] = df["%_vs_1M"].apply(format_pct)
+
     # --- Reorder columns ---
     df = df[
         [
@@ -121,12 +134,13 @@ if results:
     # --- AgGrid Config ---
     gb = GridOptionsBuilder.from_dataframe(df)
 
-    # Disable sorting/filter/menu globally (🚫 no funnels/arrows!)
     gb.configure_default_column(
         sortable=False,
         filter=False,
         resizable=True,
         suppressMenu=True,
+        floatingFilter=False,
+        suppressMovable=True,
         autoSizeColumns=True,
         wrapHeaderText=True,
         autoHeaderHeight=True,
@@ -136,30 +150,34 @@ if results:
     gb.configure_column("Symbol", pinned="left")
     gb.configure_column("Current", pinned="left", cellStyle={"fontWeight": "bold"})
 
-    # --- Highlights ---
-    pct_formatter = """function(params) {
-        if (params.value == null || params.value === "-") return "-";
-        if (params.value > 0) return params.value + "% ↑";
-        if (params.value < 0) return params.value + "% ↓";
-        return params.value + "%";
-    }"""
+    # --- Highlights via Python ---
+    def style_pct(val):
+        if val == "-" or val is None:
+            return {}
+        if "↑" in val:
+            try:
+                num = float(val.replace("% ↑", ""))
+                if num > 10:
+                    return {"color": "green", "fontWeight": "bold"}
+                return {"color": "green"}
+            except:
+                return {"color": "green"}
+        if "↓" in val:
+            try:
+                num = float(val.replace("% ↓", ""))
+                if num < -10:
+                    return {"color": "red", "fontWeight": "bold"}
+                return {"color": "red"}
+            except:
+                return {"color": "red"}
+        return {}
 
-    pct_style = """function(params) {
-        if (params.value === "-" || params.value == null) return {};
-        if (params.value > 10) {return {color: 'green', fontWeight: 'bold'};}
-        if (params.value < -10) {return {color: 'red', fontWeight: 'bold'};}
-        if (params.value > 0) {return {color: 'green'};}
-        if (params.value < 0) {return {color: 'red'};}
-        return {};
-    }"""
-
-    gb.configure_column("%_vs_1W", valueFormatter=pct_formatter, cellStyle=pct_style)
-    gb.configure_column("%_vs_1M", valueFormatter=pct_formatter, cellStyle=pct_style)
+    gb.configure_column("%_vs_1W", cellStyle=style_pct)
+    gb.configure_column("%_vs_1M", cellStyle=style_pct)
 
     gb.configure_column("Ever_High", cellStyle={"backgroundColor": "#fff7b2"})
     gb.configure_column("Ever_Low", cellStyle={"backgroundColor": "#cce5ff"})
 
-    # Build config
     grid_options = gb.build()
 
     # --- Search Box ---
@@ -173,8 +191,8 @@ if results:
         gridOptions=grid_options,
         theme="balham",
         height=600,
-        fit_columns_on_grid_load=True,   # ✅ auto adjust width
-        allow_unsafe_jscode=True,        # ✅ allow highlights
+        fit_columns_on_grid_load=True,
+        allow_unsafe_jscode=False,   # ✅ no JS injected
         enable_enterprise_modules=False,
         update_mode="NO_UPDATE",
     )
