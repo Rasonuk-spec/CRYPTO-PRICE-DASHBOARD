@@ -153,11 +153,6 @@ if results:
     # Apply config
     grid_options = gb.build()
 
-    # Auto-size all columns on load (fix for scrolling crash)
-    grid_options["onFirstDataRendered"] = {
-        "function": "params.api.sizeColumnsToFit();"
-    }
-
     # --- Live Search ---
     search_query = st.text_input("🔍 Search Symbol:", value="", key="search")
     grid_options["quickFilterText"] = st.session_state["search"]
@@ -169,7 +164,7 @@ if results:
         gridOptions=grid_options,
         theme="balham",
         height=600,
-        fit_columns_on_grid_load=True,
+        fit_columns_on_grid_load=True,   # ✅ safe auto-fit
         allow_unsafe_jscode=True,
         enable_enterprise_modules=False,
         update_mode="NO_UPDATE",
