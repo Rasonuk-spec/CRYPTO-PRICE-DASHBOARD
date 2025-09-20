@@ -118,7 +118,9 @@ if results:
         filter=False,
         resizable=True,
         suppressMenu=True,
-        suppressMovable=True,
+        autoSizeColumns=True,
+        wrapHeaderText=True,
+        autoHeaderHeight=True,
     )
 
     # Symbol and Current pinned left
@@ -148,11 +150,12 @@ if results:
     gb.configure_column("Ever_High", cellStyle={"backgroundColor": "#fff7b2"})
     gb.configure_column("Ever_Low", cellStyle={"backgroundColor": "#cce5ff"})
 
+    # Apply config
     grid_options = gb.build()
 
-    # Auto-size columns
+    # Auto-size all columns on load (fix for scrolling crash)
     grid_options["onFirstDataRendered"] = {
-        "function": "params.api.autoSizeAllColumns();"
+        "function": "params.api.sizeColumnsToFit();"
     }
 
     # --- Live Search ---
@@ -166,6 +169,10 @@ if results:
         gridOptions=grid_options,
         theme="balham",
         height=600,
+        fit_columns_on_grid_load=True,
+        allow_unsafe_jscode=True,
+        enable_enterprise_modules=False,
+        update_mode="NO_UPDATE",
     )
 
     # Extra CSV Export Button
