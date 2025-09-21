@@ -120,10 +120,12 @@ if results:
 
     df = df.applymap(safe_num)
 
+    # 🔒 Force everything to string → prevents React #62
+    df = df.astype(str)
+
     # --- AgGrid Config ---
     gb = GridOptionsBuilder.from_dataframe(df)
 
-    # Disable sorting/filter/menu globally (🚫 no funnels/arrows!)
     gb.configure_default_column(
         sortable=False,
         filter=False,
@@ -134,37 +136,12 @@ if results:
         autoHeaderHeight=True,
     )
 
-    # Pin Symbol and Current
     gb.configure_column("Symbol", pinned="left")
     gb.configure_column("Current", pinned="left", cellStyle={"fontWeight": "bold"})
-
-    # --- Highlights with JS (must be strings!) ---
-    pct_formatter = """
-    function(params) {
-        if (params.value == null || params.value === "-") return "-";
-        return params.value + "%";
-    }
-    """
-
-    pct_style = """
-    function(params) {
-        if (params.value == null || params.value === "-") return {};
-        let num = parseFloat(params.value);
-        if (num > 10) return {color: 'green', fontWeight: 'bold'};
-        if (num < -10) return {color: 'red', fontWeight: 'bold'};
-        if (num > 0) return {color: 'green'};
-        if (num < 0) return {color: 'red'};
-        return {};
-    }
-    """
-
-    gb.configure_column("%_vs_1W", valueFormatter=pct_formatter, cellStyle=pct_style)
-    gb.configure_column("%_vs_1M", valueFormatter=pct_formatter, cellStyle=pct_style)
 
     gb.configure_column("Ever_High", cellStyle={"backgroundColor": "#fff7b2"})
     gb.configure_column("Ever_Low", cellStyle={"backgroundColor": "#cce5ff"})
 
-    # Build config
     grid_options = gb.build()
 
     # --- Search Box ---
@@ -178,8 +155,8 @@ if results:
         gridOptions=grid_options,
         theme="balham",
         height=600,
-        fit_columns_on_grid_load=True,   # ✅ auto adjust width
-        allow_unsafe_jscode=True,        # ✅ JS formatters allowed
+        fit_columns_on_grid_load=True,
+        allow_unsafe_jscode=False,       # 🚫 no JS since all values are strings
         enable_enterprise_modules=False,
         update_mode="NO_UPDATE",
     )
