@@ -46,17 +46,17 @@ def compute_stats(df):
     for label, length in periods.items():
         if len(df) >= length:
             sub = df.tail(length)
-            stats[f"Avg_{label}"] = sub["close"].mean()
-            stats[f"High_{label}"] = sub["high"].max()
-            stats[f"Low_{label}"] = sub["low"].min()
+            stats[f"A_{label}"] = sub["close"].mean()
+            stats[f"H_{label}"] = sub["high"].max()
+            stats[f"L_{label}"] = sub["low"].min()
         else:
-            stats[f"Avg_{label}"] = None
-            stats[f"High_{label}"] = None
-            stats[f"Low_{label}"] = None
+            stats[f"A_{label}"] = None
+            stats[f"H_{label}"] = None
+            stats[f"L_{label}"] = None
 
     # Always include Ever High / Low
-    stats["Ever_High"] = df["high"].max()
-    stats["Ever_Low"] = df["low"].min()
+    stats["EH"] = df["high"].max()
+    stats["EL"] = df["low"].min()
     return stats
 
 
@@ -80,39 +80,52 @@ if results:
         return None
 
     df["%_vs_1W"] = df.apply(
-        lambda r: percent_change(r["Current"], r["Avg_1W"]), axis=1
+        lambda r: percent_change(r["Current"], r["A_1W"]), axis=1
     )
     df["%_vs_1M"] = df.apply(
-        lambda r: percent_change(r["Current"], r["Avg_1M"]), axis=1
+        lambda r: percent_change(r["Current"], r["A_1M"]), axis=1
     )
+
+    # --- Format % columns with colored markers ---
+    def format_pct(x):
+        if x is None or x == "-":
+            return "-"
+        if x > 0:
+            return f"+{x}% ▲🟢"
+        elif x < 0:
+            return f"{x}% ▼🔴"
+        return f"{x}%"
+
+    df["%_vs_1W"] = df["%_vs_1W"].apply(format_pct)
+    df["%_vs_1M"] = df["%_vs_1M"].apply(format_pct)
 
     # --- Reorder columns ---
     df = df[
         [
             "Symbol",
             "Current",
-            "Avg_24H",
-            "Avg_1W",
-            "Avg_1M",
-            "High_24H",
-            "High_1W",
-            "High_1M",
-            "Low_24H",
-            "Low_1W",
-            "Low_1M",
-            "Ever_High",
-            "Ever_Low",
+            "A_24H",
+            "A_1W",
+            "A_1M",
+            "H_24H",
+            "H_1W",
+            "H_1M",
+            "L_24H",
+            "L_1W",
+            "L_1M",
+            "EH",
+            "EL",
             "%_vs_1W",
             "%_vs_1M",
         ]
     ]
 
-    # --- Sanitize values (JSON safe) ---
+    # --- Sanitize values ---
     df = df.replace([np.inf, -np.inf], None)
     df = df.fillna("-")
 
     def safe_num(x):
-        if isinstance(x, (np.generic,)):  # numpy types → Python native
+        if isinstance(x, (np.generic,)):
             return x.item()
         if isinstance(x, (int, float)):
             return round(x, 4)
@@ -120,7 +133,7 @@ if results:
 
     df = df.applymap(safe_num)
 
-    # 🔒 Force everything to string → prevents React #62
+    # 🔒 Force to string (prevents React errors)
     df = df.astype(str)
 
     # --- AgGrid Config ---
@@ -139,8 +152,8 @@ if results:
     gb.configure_column("Symbol", pinned="left")
     gb.configure_column("Current", pinned="left", cellStyle={"fontWeight": "bold"})
 
-    gb.configure_column("Ever_High", cellStyle={"backgroundColor": "#fff7b2"})
-    gb.configure_column("Ever_Low", cellStyle={"backgroundColor": "#cce5ff"})
+    gb.configure_column("EH", cellStyle={"backgroundColor": "#fff7b2"})
+    gb.configure_column("EL", cellStyle={"backgroundColor": "#cce5ff"})
 
     grid_options = gb.build()
 
@@ -156,7 +169,7 @@ if results:
         theme="balham",
         height=600,
         fit_columns_on_grid_load=True,
-        allow_unsafe_jscode=False,       # 🚫 no JS since all values are strings
+        allow_unsafe_jscode=False,  # safe
         enable_enterprise_modules=False,
         update_mode="NO_UPDATE",
     )
