@@ -4,9 +4,9 @@ import ccxt
 import json
 import numpy as np
 from streamlit_autorefresh import st_autorefresh
-from st_aggrid import AgGrid, GridOptionsBuilder
+import plotly.graph_objects as go
 
-st.set_page_config(page_title="Crypto Dashboard", layout="wide")
+st.set_page_config(page_title="Crypto Dashboard & Analysis", layout="wide")
 
 # 🔄 Auto-refresh every 5 minutes
 st_autorefresh(interval=300000, key="crypto_refresh")
@@ -18,8 +18,7 @@ with open("coins.json") as f:
 # Bitget exchange
 exchange = ccxt.bitget({"enableRateLimit": True})
 
-st.title("📊 Crypto Dashboard")
-
+st.title("📊 Crypto Dashboard + Buy/Sell Analysis")
 
 # --- Fetch OHLCV ---
 def fetch_ohlcv(symbol, limit=2000):
@@ -32,7 +31,6 @@ def fetch_ohlcv(symbol, limit=2000):
         return df
     except Exception:
         return None
-
 
 # --- Compute Stats ---
 def compute_stats(df):
@@ -54,11 +52,9 @@ def compute_stats(df):
             stats[f"H_{label}"] = None
             stats[f"L_{label}"] = None
 
-    # Always include Ever High / Low
     stats["EH"] = df["high"].max()
     stats["EL"] = df["low"].min()
     return stats
-
 
 # --- Collect Data ---
 results = []
@@ -73,112 +69,57 @@ for coin in COINS:
 if results:
     df = pd.DataFrame(results)
 
-    # --- % Change calculations ---
-    def percent_change(current, ref):
-        if ref and ref != 0:
-            return round(((current - ref) / ref) * 100, 2)
-        return None
+    # --- Analysis Table ---
+    analysis = df[['Symbol','Current','L_24H','L_1W','L_1M','EL','H_24H','H_1W','H_1M','EH']].copy()
 
-    df["%_vs_1W"] = df.apply(
-        lambda r: percent_change(r["Current"], r["A_1W"]), axis=1
-    )
-    df["%_vs_1M"] = df.apply(
-        lambda r: percent_change(r["Current"], r["A_1M"]), axis=1
+    analysis["Best_Buy_Level"] = analysis[['L_24H','L_1W','L_1M','EL']].min(axis=1)
+    analysis["Best_Sell_Level"] = analysis[['H_24H','H_1W','H_1M','EH']].max(axis=1)
+    analysis["Stop_Loss"] = analysis["Best_Buy_Level"] * 0.95   # 5% below buy
+    analysis["Potential_Profit_%"] = (
+        (analysis["Best_Sell_Level"] - analysis["Best_Buy_Level"]) / analysis["Best_Buy_Level"] * 100
     )
 
-    # --- Format % columns with colored markers ---
-    def format_pct(x):
-        if x is None or x == "-":
-            return "-"
-        if x > 0:
-            return f"+{x}% ▲🟢"
-        elif x < 0:
-            return f"{x}% ▼🔴"
-        return f"{x}%"
+    # --- Show Pivot Table ---
+    st.subheader("📋 Buy/Sell Analysis Table (with Stop Loss)")
+    st.dataframe(analysis, use_container_width=True)
 
-    df["%_vs_1W"] = df["%_vs_1W"].apply(format_pct)
-    df["%_vs_1M"] = df["%_vs_1M"].apply(format_pct)
+    # --- Coin Selector ---
+    coin = st.selectbox("🔍 Select a coin for detailed chart", analysis["Symbol"].unique())
 
-    # --- Reorder columns ---
-    df = df[
-        [
-            "Symbol",
-            "Current",
-            "A_24H",
-            "A_1W",
-            "A_1M",
-            "H_24H",
-            "H_1W",
-            "H_1M",
-            "L_24H",
-            "L_1W",
-            "L_1M",
-            "EH",
-            "EL",
-            "%_vs_1W",
-            "%_vs_1M",
-        ]
-    ]
+    if coin:
+        row = analysis[analysis["Symbol"] == coin].iloc[0]
 
-    # --- Sanitize values ---
-    df = df.replace([np.inf, -np.inf], None)
-    df = df.fillna("-")
+        # Chart
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            x=["Stop Loss", "Best Buy", "Current Price", "Best Sell"],
+            y=[row["Stop_Loss"], row["Best_Buy_Level"], row["Current"], row["Best_Sell_Level"]],
+            marker_color=["orange", "green", "blue", "red"]
+        ))
+        fig.update_layout(
+            title=f"📈 {coin} Buy/Sell Strategy with SL",
+            yaxis_title="Price (USDT)",
+            xaxis_title="Levels"
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
-    def safe_num(x):
-        if isinstance(x, (np.generic,)):
-            return x.item()
-        if isinstance(x, (int, float)):
-            return round(x, 4)
-        return x
+        # Strategy Summary
+        st.success(
+            f"""
+            **{coin} Strategy**
+            - 🛑 Stop Loss: {row['Stop_Loss']:.2f}
+            - ✅ Suggested Buy: {row['Best_Buy_Level']:.2f}
+            - 📍 Current: {row['Current']:.2f}
+            - 🎯 Take Profit: {row['Best_Sell_Level']:.2f}
+            - 📊 Potential Gain: {round(row['Potential_Profit_%'], 2)}%
+            """
+        )
 
-    df = df.applymap(safe_num)
-
-    # 🔒 Force to string (prevents React errors)
-    df = df.astype(str)
-
-    # --- AgGrid Config ---
-    gb = GridOptionsBuilder.from_dataframe(df)
-
-    gb.configure_default_column(
-        sortable=False,
-        filter=False,
-        resizable=True,
-        suppressMenu=True,
-        autoSizeColumns=True,
-        wrapHeaderText=True,
-        autoHeaderHeight=True,
-    )
-
-    gb.configure_column("Symbol", pinned="left")
-    gb.configure_column("Current", pinned="left", cellStyle={"fontWeight": "bold"})
-
-    gb.configure_column("EH", cellStyle={"backgroundColor": "#fff7b2"})
-    gb.configure_column("EL", cellStyle={"backgroundColor": "#cce5ff"})
-
-    grid_options = gb.build()
-
-    # --- Search Box ---
-    search_query = st.text_input("🔍 Search Symbol:", value="")
-    grid_options["quickFilterText"] = search_query
-
-    # --- Render AgGrid ---
-    st.subheader("📋 Market Stats")
-    AgGrid(
-        df,
-        gridOptions=grid_options,
-        theme="balham",
-        height=600,
-        fit_columns_on_grid_load=True,
-        allow_unsafe_jscode=False,  # safe
-        enable_enterprise_modules=False,
-        update_mode="NO_UPDATE",
-    )
-
-    # CSV Export
+    # --- CSV Export ---
     st.download_button(
-        "📥 Download CSV",
-        df.to_csv(index=False).encode("utf-8"),
-        file_name="crypto_dashboard.csv",
+        "📥 Download Analysis CSV",
+        analysis.to_csv(index=False).encode("utf-8"),
+        file_name="crypto_analysis.csv",
         mime="text/csv",
     )
 
