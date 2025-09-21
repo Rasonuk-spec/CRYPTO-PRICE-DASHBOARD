@@ -2,9 +2,7 @@ import streamlit as st
 import pandas as pd
 import ccxt
 import json
-import numpy as np
 from streamlit_autorefresh import st_autorefresh
-import plotly.graph_objects as go
 
 st.set_page_config(page_title="Crypto Dashboard & Analysis", layout="wide")
 
@@ -75,33 +73,42 @@ if results:
     analysis["Best_Buy_Level"] = analysis[['L_24H','L_1W','L_1M','EL']].min(axis=1)
     analysis["Best_Sell_Level"] = analysis[['H_24H','H_1W','H_1M','EH']].max(axis=1)
     analysis["Stop_Loss"] = analysis["Best_Buy_Level"] * 0.95   # 5% below buy
+
+    # % Differences
+    analysis["Diff_vs_Buy_%"] = ((analysis["Current"] - analysis["Best_Buy_Level"]) / analysis["Best_Buy_Level"]) * 100
+    analysis["Diff_vs_Sell_%"] = ((analysis["Current"] - analysis["Best_Sell_Level"]) / analysis["Best_Sell_Level"]) * 100
     analysis["Potential_Profit_%"] = (
         (analysis["Best_Sell_Level"] - analysis["Best_Buy_Level"]) / analysis["Best_Buy_Level"] * 100
     )
 
+    # --- Styling for table ---
+    def color_percent(val):
+        if pd.isna(val):
+            return ""
+        color = "green" if val > 0 else "red"
+        return f"color: {color}; font-weight: bold"
+
+    styled_df = analysis.style.format(
+        {
+            "Current": "{:.2f}",
+            "Best_Buy_Level": "{:.2f}",
+            "Best_Sell_Level": "{:.2f}",
+            "Stop_Loss": "{:.2f}",
+            "Diff_vs_Buy_%": "{:.2f}%",
+            "Diff_vs_Sell_%": "{:.2f}%",
+            "Potential_Profit_%": "{:.2f}%",
+        }
+    ).applymap(color_percent, subset=["Diff_vs_Buy_%", "Diff_vs_Sell_%", "Potential_Profit_%"])
+
     # --- Show Pivot Table ---
-    st.subheader("📋 Buy/Sell Analysis Table (with Stop Loss)")
-    st.dataframe(analysis, use_container_width=True)
+    st.subheader("📋 Buy/Sell Analysis Table (with Stop Loss and %)")
+    st.dataframe(styled_df, use_container_width=True)
 
     # --- Coin Selector ---
-    coin = st.selectbox("🔍 Select a coin for detailed chart", analysis["Symbol"].unique())
+    coin = st.selectbox("🔍 Select a coin for detailed summary", analysis["Symbol"].unique())
 
     if coin:
         row = analysis[analysis["Symbol"] == coin].iloc[0]
-
-        # Chart
-        fig = go.Figure()
-        fig.add_trace(go.Bar(
-            x=["Stop Loss", "Best Buy", "Current Price", "Best Sell"],
-            y=[row["Stop_Loss"], row["Best_Buy_Level"], row["Current"], row["Best_Sell_Level"]],
-            marker_color=["orange", "green", "blue", "red"]
-        ))
-        fig.update_layout(
-            title=f"📈 {coin} Buy/Sell Strategy with SL",
-            yaxis_title="Price (USDT)",
-            xaxis_title="Levels"
-        )
-        st.plotly_chart(fig, use_container_width=True)
 
         # Strategy Summary
         st.success(
@@ -111,7 +118,11 @@ if results:
             - ✅ Suggested Buy: {row['Best_Buy_Level']:.2f}
             - 📍 Current: {row['Current']:.2f}
             - 🎯 Take Profit: {row['Best_Sell_Level']:.2f}
-            - 📊 Potential Gain: {round(row['Potential_Profit_%'], 2)}%
+
+            **Price Differences**
+            - Current vs Buy: {row['Diff_vs_Buy_%']:.2f}%
+            - Current vs Sell: {row['Diff_vs_Sell_%']:.2f}%
+            - Potential Gain (Buy → Sell): {row['Potential_Profit_%']:.2f}%
             """
         )
 
