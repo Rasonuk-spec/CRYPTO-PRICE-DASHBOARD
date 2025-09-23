@@ -4,7 +4,7 @@ import ccxt
 import json
 from streamlit_autorefresh import st_autorefresh
 
-st.set_page_config(page_title="Crypto Dashboard + Buy/Sell Analysis", layout="wide")
+st.set_page_config(page_title="Crypto Dashboard & Analysis", layout="wide")
 
 # 🔄 Auto-refresh every 5 minutes
 st_autorefresh(interval=300000, key="crypto_refresh")
@@ -49,6 +49,9 @@ def compute_stats(df):
             stats[f"A_{label}"] = None
             stats[f"H_{label}"] = None
             stats[f"L_{label}"] = None
+
+    stats["EH"] = df["high"].max()
+    stats["EL"] = df["low"].min()
     return stats
 
 # --- Collect Data ---
@@ -64,12 +67,12 @@ for coin in COINS:
 if results:
     df = pd.DataFrame(results)
 
-    # --- Base Analysis ---
-    analysis = df[['Symbol','Current','L_24H','L_1W','L_1M','H_24H','H_1W','H_1M']].copy()
+    # --- Analysis Table ---
+    analysis = df[['Symbol','Current','L_24H','L_1W','L_1M','EL','H_24H','H_1W','H_1M','EH']].copy()
 
-    analysis["Best_Buy_Level"] = analysis[['L_24H','L_1W','L_1M']].min(axis=1)
-    analysis["Best_Sell_Level"] = analysis[['H_24H','H_1W','H_1M']].max(axis=1)
-    analysis["Stop_Loss"] = analysis["Best_Buy_Level"] * 0.95
+    analysis["Best_Buy_Level"] = analysis[['L_24H','L_1W','L_1M','EL']].min(axis=1)
+    analysis["Best_Sell_Level"] = analysis[['H_24H','H_1W','H_1M','EH']].max(axis=1)
+    analysis["Stop_Loss"] = analysis["Best_Buy_Level"] * 0.95   # 5% below buy
 
     # % Differences
     analysis["Diff_vs_Buy_%"] = ((analysis["Current"] - analysis["Best_Buy_Level"]) / analysis["Best_Buy_Level"]) * 100
@@ -78,14 +81,7 @@ if results:
         (analysis["Best_Sell_Level"] - analysis["Best_Buy_Level"]) / analysis["Best_Buy_Level"] * 100
     )
 
-    # --- Advanced Analysis (Option B) ---
-    analysis["Fair_Buy_Range"] = (analysis["L_1W"] + analysis["L_1M"]) / 2
-    analysis["Fair_Sell_Range"] = (analysis["H_1W"] + analysis["H_1M"]) / 2
-    analysis["Risk_Level"] = analysis["Current"] - analysis["Best_Buy_Level"]
-    analysis["Reward_Level"] = analysis["Best_Sell_Level"] - analysis["Current"]
-    analysis["Risk_Reward_Ratio"] = analysis["Reward_Level"] / analysis["Risk_Level"]
-
-    # --- Smart decimal formatting ---
+    # --- Smart Formatter ---
     def smart_format(val):
         try:
             val = float(val)
@@ -96,28 +92,38 @@ if results:
             else:
                 return f"{val:.2f}"
         except:
-            return str(val)
+            return val
 
-    # --- Show Option A ---
-    st.subheader("📋 Option A: Clean Buy/Sell Table")
-    option_a = analysis[["Symbol","Current","Best_Buy_Level","Best_Sell_Level","Stop_Loss",
-                         "Diff_vs_Buy_%","Diff_vs_Sell_%","Potential_Profit_%"]]
-    numeric_cols_a = option_a.columns.drop("Symbol")
-    st.dataframe(option_a.style.format({col: smart_format for col in numeric_cols_a}),
-                 use_container_width=True)
+    # --- Styling for table ---
+    def color_percent(val):
+        if pd.isna(val):
+            return ""
+        color = "green" if val > 0 else "red"
+        return f"color: {color}; font-weight: bold"
 
-    # --- Show Option B ---
-    st.subheader("📊 Option B: Advanced Risk/Reward Analysis")
-    option_b = analysis[["Symbol","Current","Best_Buy_Level","Best_Sell_Level","Fair_Buy_Range","Fair_Sell_Range",
-                         "Risk_Level","Reward_Level","Risk_Reward_Ratio"]]
-    numeric_cols_b = option_b.columns.drop("Symbol")
-    st.dataframe(option_b.style.format({col: smart_format for col in numeric_cols_b}),
-                 use_container_width=True)
+    styled_df = analysis.style.format(
+        {
+            "Current": smart_format,
+            "Best_Buy_Level": smart_format,
+            "Best_Sell_Level": smart_format,
+            "Stop_Loss": smart_format,
+            "Diff_vs_Buy_%": "{:.2f}%",
+            "Diff_vs_Sell_%": "{:.2f}%",
+            "Potential_Profit_%": "{:.2f}%",
+        }
+    ).applymap(color_percent, subset=["Diff_vs_Buy_%", "Diff_vs_Sell_%", "Potential_Profit_%"])
+
+    # --- Show Table ---
+    st.subheader("📋 Buy/Sell Analysis Table (with Stop Loss and %)")
+    st.dataframe(styled_df, use_container_width=True)
 
     # --- Coin Selector ---
     coin = st.selectbox("🔍 Select a coin for detailed summary", analysis["Symbol"].unique())
+
     if coin:
         row = analysis[analysis["Symbol"] == coin].iloc[0]
+
+        # Strategy Summary
         st.success(
             f"""
             **{coin} Strategy**
@@ -126,10 +132,10 @@ if results:
             - 📍 Current: {smart_format(row['Current'])}
             - 🎯 Take Profit: {smart_format(row['Best_Sell_Level'])}
 
-            **Risk/Reward**
-            - Risk: {smart_format(row['Risk_Level'])}
-            - Reward: {smart_format(row['Reward_Level'])}
-            - R/R Ratio: {row['Risk_Reward_Ratio']:.2f}
+            **Price Differences**
+            - Current vs Buy: {row['Diff_vs_Buy_%']:.2f}%
+            - Current vs Sell: {row['Diff_vs_Sell_%']:.2f}%
+            - Potential Gain (Buy → Sell): {row['Potential_Profit_%']:.2f}%
             """
         )
 
