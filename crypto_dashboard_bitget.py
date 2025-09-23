@@ -81,6 +81,19 @@ if results:
         (analysis["Best_Sell_Level"] - analysis["Best_Buy_Level"]) / analysis["Best_Buy_Level"] * 100
     )
 
+    # --- Smart formatting for prices ---
+    def smart_format(val):
+        try:
+            val = float(val)
+            if abs(val) < 1:
+                return f"{val:.8f}"
+            elif abs(val) < 100:
+                return f"{val:.6f}"
+            else:
+                return f"{val:.2f}"
+        except:
+            return val
+
     # --- Styling for table ---
     def color_percent(val):
         if pd.isna(val):
@@ -90,10 +103,10 @@ if results:
 
     styled_df = analysis.style.format(
         {
-            "Current": "{:.2f}",
-            "Best_Buy_Level": "{:.2f}",
-            "Best_Sell_Level": "{:.2f}",
-            "Stop_Loss": "{:.2f}",
+            "Current": smart_format,
+            "Best_Buy_Level": smart_format,
+            "Best_Sell_Level": smart_format,
+            "Stop_Loss": smart_format,
             "Diff_vs_Buy_%": "{:.2f}%",
             "Diff_vs_Sell_%": "{:.2f}%",
             "Potential_Profit_%": "{:.2f}%",
@@ -114,10 +127,10 @@ if results:
         st.success(
             f"""
             **{coin} Strategy**
-            - 🛑 Stop Loss: {row['Stop_Loss']:.2f}
-            - ✅ Suggested Buy: {row['Best_Buy_Level']:.2f}
-            - 📍 Current: {row['Current']:.2f}
-            - 🎯 Take Profit: {row['Best_Sell_Level']:.2f}
+            - 🛑 Stop Loss: {smart_format(row['Stop_Loss'])}
+            - ✅ Suggested Buy: {smart_format(row['Best_Buy_Level'])}
+            - 📍 Current: {smart_format(row['Current'])}
+            - 🎯 Take Profit: {smart_format(row['Best_Sell_Level'])}
 
             **Price Differences**
             - Current vs Buy: {row['Diff_vs_Buy_%']:.2f}%
