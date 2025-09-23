@@ -87,26 +87,32 @@ if results:
 
     # --- Smart decimal formatting ---
     def smart_format(val):
-        if pd.isna(val):
-            return ""
-        if abs(val) < 1:
-            return f"{val:.8f}"
-        elif abs(val) < 100:
-            return f"{val:.6f}"
-        else:
-            return f"{val:.2f}"
+        try:
+            val = float(val)
+            if abs(val) < 1:
+                return f"{val:.8f}"
+            elif abs(val) < 100:
+                return f"{val:.6f}"
+            else:
+                return f"{val:.2f}"
+        except:
+            return str(val)
 
     # --- Show Option A ---
     st.subheader("📋 Option A: Clean Buy/Sell Table")
     option_a = analysis[["Symbol","Current","Best_Buy_Level","Best_Sell_Level","Stop_Loss",
                          "Diff_vs_Buy_%","Diff_vs_Sell_%","Potential_Profit_%"]]
-    st.dataframe(option_a.style.format(smart_format), use_container_width=True)
+    numeric_cols_a = option_a.columns.drop("Symbol")
+    st.dataframe(option_a.style.format({col: smart_format for col in numeric_cols_a}),
+                 use_container_width=True)
 
     # --- Show Option B ---
     st.subheader("📊 Option B: Advanced Risk/Reward Analysis")
     option_b = analysis[["Symbol","Current","Best_Buy_Level","Best_Sell_Level","Fair_Buy_Range","Fair_Sell_Range",
                          "Risk_Level","Reward_Level","Risk_Reward_Ratio"]]
-    st.dataframe(option_b.style.format(smart_format), use_container_width=True)
+    numeric_cols_b = option_b.columns.drop("Symbol")
+    st.dataframe(option_b.style.format({col: smart_format for col in numeric_cols_b}),
+                 use_container_width=True)
 
     # --- Coin Selector ---
     coin = st.selectbox("🔍 Select a coin for detailed summary", analysis["Symbol"].unique())
