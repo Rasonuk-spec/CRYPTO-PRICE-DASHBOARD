@@ -64,7 +64,7 @@ for coin in COINS:
 if results:
     df = pd.DataFrame(results)
 
-    # --- Base Analysis (Option A) ---
+    # --- Base Analysis ---
     analysis = df[['Symbol','Current','L_24H','L_1W','L_1M','H_24H','H_1W','H_1M']].copy()
 
     analysis["Best_Buy_Level"] = analysis[['L_24H','L_1W','L_1M']].min(axis=1)
@@ -78,36 +78,35 @@ if results:
         (analysis["Best_Sell_Level"] - analysis["Best_Buy_Level"]) / analysis["Best_Buy_Level"] * 100
     )
 
-    # --- Option B: Advanced Analysis ---
+    # --- Advanced Analysis (Option B) ---
     analysis["Fair_Buy_Range"] = (analysis["L_1W"] + analysis["L_1M"]) / 2
     analysis["Fair_Sell_Range"] = (analysis["H_1W"] + analysis["H_1M"]) / 2
     analysis["Risk_Level"] = analysis["Current"] - analysis["Best_Buy_Level"]
     analysis["Reward_Level"] = analysis["Best_Sell_Level"] - analysis["Current"]
     analysis["Risk_Reward_Ratio"] = analysis["Reward_Level"] / analysis["Risk_Level"]
 
-    # --- Formatting (show up to 8 decimals) ---
+    # --- Smart decimal formatting ---
     def smart_format(val):
         if pd.isna(val):
             return ""
-        if val < 1:
+        if abs(val) < 1:
             return f"{val:.8f}"
-        elif val < 100:
+        elif abs(val) < 100:
             return f"{val:.6f}"
         else:
             return f"{val:.2f}"
 
-    styled_df = analysis.style.format(
-        {col: smart_format for col in analysis.columns if col not in ["Symbol"]}
-    )
-
-    # --- Show Tables ---
+    # --- Show Option A ---
     st.subheader("📋 Option A: Clean Buy/Sell Table")
-    st.dataframe(styled_df[["Symbol","Current","Best_Buy_Level","Best_Sell_Level","Stop_Loss",
-                            "Diff_vs_Buy_%","Diff_vs_Sell_%","Potential_Profit_%"]], use_container_width=True)
+    option_a = analysis[["Symbol","Current","Best_Buy_Level","Best_Sell_Level","Stop_Loss",
+                         "Diff_vs_Buy_%","Diff_vs_Sell_%","Potential_Profit_%"]]
+    st.dataframe(option_a.style.format(smart_format), use_container_width=True)
 
+    # --- Show Option B ---
     st.subheader("📊 Option B: Advanced Risk/Reward Analysis")
-    st.dataframe(styled_df[["Symbol","Current","Best_Buy_Level","Best_Sell_Level","Fair_Buy_Range","Fair_Sell_Range",
-                            "Risk_Level","Reward_Level","Risk_Reward_Ratio"]], use_container_width=True)
+    option_b = analysis[["Symbol","Current","Best_Buy_Level","Best_Sell_Level","Fair_Buy_Range","Fair_Sell_Range",
+                         "Risk_Level","Reward_Level","Risk_Reward_Ratio"]]
+    st.dataframe(option_b.style.format(smart_format), use_container_width=True)
 
     # --- Coin Selector ---
     coin = st.selectbox("🔍 Select a coin for detailed summary", analysis["Symbol"].unique())
