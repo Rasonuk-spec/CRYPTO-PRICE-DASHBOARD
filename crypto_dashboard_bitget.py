@@ -147,5 +147,36 @@ if results:
         mime="text/csv",
     )
 
+    # --- Small Trade Opportunities ---
+    st.subheader("✅ Coins Suitable for Multiple Small Trades ($5–6 each)")
+    try:
+        markets = exchange.load_markets()
+        trade_size_usdt = 6
+        good_coins = []
+
+        for symbol, market in markets.items():
+            if ":USDT" not in symbol:
+                continue
+            limits = market.get("limits", {})
+            cost_limits = limits.get("cost", {})
+            min_cost = cost_limits.get("min")
+            max_cost = cost_limits.get("max")
+
+            if min_cost is not None and max_cost is not None:
+                if max_cost >= trade_size_usdt * 5 and min_cost <= trade_size_usdt:
+                    good_coins.append({
+                        "Symbol": symbol,
+                        "Min Order (USDT)": min_cost,
+                        "Max Open (USDT)": max_cost
+                    })
+
+        if good_coins:
+            st.dataframe(pd.DataFrame(good_coins), use_container_width=True)
+        else:
+            st.warning("⚠️ No suitable coins found for 5–6 simultaneous small trades. Try larger coins like BTC, ETH, SOL.")
+
+    except Exception as e:
+        st.error(f"Error fetching coin limits: {e}")
+
 else:
     st.error("No data available. Check coins.json or Bitget symbols.")
