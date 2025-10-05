@@ -41,6 +41,7 @@ def compute_stats(symbol):
 
     periods_days = {
         "24H": 1,
+        "3D": 3,
         "1W": 7,
         "1M": 30,
         "2M": 60,
@@ -52,14 +53,14 @@ def compute_stats(symbol):
     for label, days in periods_days.items():
         if len(df_daily) >= days:
             sub = df_daily.tail(days)
+            stats[f"A_{label}"] = sub["close"].mean()
             stats[f"H_{label}"] = sub["high"].max()
             stats[f"L_{label}"] = sub["low"].min()
-            stats[f"A_{label}"] = sub["close"].mean()
             stats[f"P_{label}"] = ((stats[f"H_{label}"] - stats[f"L_{label}"]) / stats[f"L_{label}"]) * 100
         else:
+            stats[f"A_{label}"] = None
             stats[f"H_{label}"] = None
             stats[f"L_{label}"] = None
-            stats[f"A_{label}"] = None
             stats[f"P_{label}"] = None
 
     stats["EH"] = df_daily["high"].max()
@@ -86,17 +87,18 @@ if results:
         [
             "Symbol",
             "Current",
-            "H_24H", "A_24H", "L_24H", "P_24H",
-            "H_1W", "A_1W", "L_1W", "P_1W",
-            "H_1M", "A_1M", "L_1M", "P_1M",
-            "H_2M", "A_2M", "L_2M", "P_2M",
-            "H_6M", "A_6M", "L_6M", "P_6M",
-            "EH", "A_Ever", "EL",
+            "A_24H", "H_24H", "L_24H", "P_24H",
+            "A_3D", "H_3D", "L_3D", "P_3D",
+            "A_1W", "H_1W", "L_1W", "P_1W",
+            "A_1M", "H_1M", "L_1M", "P_1M",
+            "A_2M", "H_2M", "L_2M", "P_2M",
+            "A_6M", "H_6M", "L_6M", "P_6M",
+            "A_Ever", "EH", "EL",
         ]
     ].copy()
 
-    # Sort by 24H percentage change descending
-    analysis = analysis.sort_values(by="P_24H", ascending=False)
+    # Sort by 3D percentage change descending
+    analysis = analysis.sort_values(by="P_3D", ascending=False)
 
     # --- Smart formatting for prices ---
     def smart_format(val):
@@ -117,14 +119,60 @@ if results:
         except:
             return ""
 
-    styled_df = analysis.style.format(
-        {col: smart_format for col in analysis.columns if not col.startswith("P_")}
-    ).format(
-        {col: format_percent for col in analysis.columns if col.startswith("P_")}
+    # --- Conditional color for average ---
+    def color_avg(val, current):
+        try:
+            val = float(val)
+            current = float(current)
+            color = "green" if val > current else "red"
+            return f"color: {color}"
+        except:
+            return ""
+
+    # --- Build style ---
+    styled_df = (
+        analysis.style.format(
+            {col: smart_format for col in analysis.columns if not col.startswith("P_")}
+        )
+        .format({col: format_percent for col in analysis.columns if col.startswith("P_")})
+        .apply(
+            lambda row: [
+                color_avg(row[col], row["Current"]) if col.startswith("A_") else ""
+                for col in analysis.columns
+            ],
+            axis=1,
+        )
+        .set_table_styles(
+            [
+                {
+                    "selector": "thead th",
+                    "props": [("background-color", "#0e1117"), ("color", "white"), ("font-weight", "bold")],
+                },
+                {"selector": "th", "props": [("border", "1px solid #444")]},
+                {"selector": "td", "props": [("border", "1px solid #444")]},
+            ]
+        )
     )
 
-    # --- Show Pivot Table ---
-    st.subheader("📋 Multi-Period High / Average / Low + % Change Table")
+    # --- Add thicker borders to differentiate sections ---
+    borders = ["24H", "3D", "1W", "1M", "2M", "6M"]
+    for label in borders:
+        styled_df = styled_df.set_table_styles(
+            [
+                {
+                    "selector": f"th.col_heading.level0.col{analysis.columns.get_loc('P_'+label)}",
+                    "props": [("border-right", "3px solid #555")],
+                },
+                {
+                    "selector": f"td.col{analysis.columns.get_loc('P_'+label)}",
+                    "props": [("border-right", "3px solid #555")],
+                },
+            ],
+            overwrite=False,
+        )
+
+    # --- Display ---
+    st.subheader("📋 Multi-Period High / Average / Low + % Change Table (Sorted by 3D % Change)")
     st.dataframe(styled_df, use_container_width=True)
 
     # --- Freeze top row & rightmost column ---
