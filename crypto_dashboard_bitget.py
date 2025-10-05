@@ -117,4 +117,100 @@ if results:
         try:
             return f"{val:.2f}%"
         except:
-            retur
+            return ""
+
+    # --- Conditional color for average ---
+    def color_avg(val, current):
+        try:
+            val = float(val)
+            current = float(current)
+            color = "green" if val > current else "red"
+            return f"color: {color}"
+        except:
+            return ""
+
+    # --- Build style ---
+    styled_df = (
+        analysis.style.format(
+            {col: smart_format for col in analysis.columns if not col.startswith("P_")}
+        )
+        .format({col: format_percent for col in analysis.columns if col.startswith("P_")})
+        .apply(
+            lambda row: [
+                color_avg(row[col], row["Current"]) if col.startswith("A_") else ""
+                for col in analysis.columns
+            ],
+            axis=1,
+        )
+        .set_table_styles(
+            [
+                {
+                    "selector": "thead th",
+                    "props": [
+                        ("background-color", "#0e1117"),
+                        ("color", "white"),
+                        ("font-weight", "bold"),
+                        ("border", "1px solid #555"),
+                    ],
+                },
+                {"selector": "td", "props": [("border", "1px solid #333")]},
+            ]
+        )
+    )
+
+    # --- Add thicker borders between sections ---
+    section_labels = ["24H", "3D", "1W", "1M", "2M", "6M"]
+    for label in section_labels:
+        for col_suffix in ["P_" + label]:
+            if col_suffix in analysis.columns:
+                col_index = analysis.columns.get_loc(col_suffix)
+                styled_df = styled_df.set_table_styles(
+                    [
+                        {
+                            "selector": f"th:nth-child({col_index + 1})",
+                            "props": [("border-right", "3px solid #888")],
+                        },
+                        {
+                            "selector": f"td:nth-child({col_index + 1})",
+                            "props": [("border-right", "3px solid #888")],
+                        },
+                    ],
+                    overwrite=False,
+                )
+
+    # --- Display ---
+    st.subheader("📋 Multi-Period High / Average / Low + % Change Table (Sorted by 3D % Change)")
+    st.dataframe(styled_df, use_container_width=True)
+
+    # --- Freeze top row & rightmost column ---
+    st.markdown(
+        """
+        <style>
+        [data-testid="stDataFrame"] th {
+            position: sticky;
+            top: 0;
+            background: #0e1117;
+            z-index: 2;
+        }
+        [data-testid="stDataFrame"] td:last-child,
+        [data-testid="stDataFrame"] th:last-child {
+            position: sticky;
+            right: 0;
+            background: #0e1117;
+            z-index: 1;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # --- CSV Export ---
+    st.download_button(
+        "📥 Download Analysis CSV",
+        analysis.to_csv(index=False).encode("utf-8"),
+        file_name="crypto_avg_change_analysis.csv",
+        mime="text/csv",
+    )
+
+else:
+    st.error("No data available. Check coins.json or Bitget symbols.")
