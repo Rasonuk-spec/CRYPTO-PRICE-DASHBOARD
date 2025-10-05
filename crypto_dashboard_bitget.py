@@ -18,18 +18,15 @@ exchange = ccxt.bitget({"enableRateLimit": True})
 
 st.title("📊 Crypto Dashboard — High/Low/Average & % Change")
 
-# --- Fetch OHLCV (Daily for long history) ---
+# --- Fetch OHLCV ---
 def fetch_ohlcv(symbol, timeframe="1d", limit=1500):
     try:
         data = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
-        df = pd.DataFrame(
-            data, columns=["timestamp", "open", "high", "low", "close", "volume"]
-        )
+        df = pd.DataFrame(data, columns=["timestamp", "open", "high", "low", "close", "volume"])
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
         return df
     except Exception:
         return None
-
 
 # --- Compute Stats ---
 def compute_stats(symbol):
@@ -56,19 +53,18 @@ def compute_stats(symbol):
             stats[f"A_{label}"] = sub["close"].mean()
             stats[f"H_{label}"] = sub["high"].max()
             stats[f"L_{label}"] = sub["low"].min()
-            stats[f"P_{label}"] = ((stats[f"H_{label}"] - stats[f"L_{label}"]) / stats[f"L_{label}"]) * 100
+            stats[f"%_{label}"] = ((stats[f"H_{label}"] - stats[f"L_{label}"]) / stats[f"L_{label}"]) * 100
         else:
             stats[f"A_{label}"] = None
             stats[f"H_{label}"] = None
             stats[f"L_{label}"] = None
-            stats[f"P_{label}"] = None
+            stats[f"%_{label}"] = None
 
     stats["EH"] = df_daily["high"].max()
     stats["EL"] = df_daily["low"].min()
     stats["A_Ever"] = df_daily["close"].mean()
 
     return stats
-
 
 # --- Collect Data ---
 results = []
@@ -82,25 +78,24 @@ for coin in COINS:
 if results:
     df = pd.DataFrame(results)
 
-    # --- Analysis Table ---
+    # --- Table Layout (Ever columns right after Current)
     analysis = df[
         [
             "Symbol",
-            "Current",
-            "A_24H", "H_24H", "L_24H", "P_24H",
-            "A_3D", "H_3D", "L_3D", "P_3D",
-            "A_1W", "H_1W", "L_1W", "P_1W",
-            "A_1M", "H_1M", "L_1M", "P_1M",
-            "A_2M", "H_2M", "L_2M", "P_2M",
-            "A_6M", "H_6M", "L_6M", "P_6M",
-            "A_Ever", "EH", "EL",
+            "Current", "A_Ever", "EH", "EL",
+            "A_24H", "H_24H", "L_24H", "%_24H",
+            "A_3D", "H_3D", "L_3D", "%_3D",
+            "A_1W", "H_1W", "L_1W", "%_1W",
+            "A_1M", "H_1M", "L_1M", "%_1M",
+            "A_2M", "H_2M", "L_2M", "%_2M",
+            "A_6M", "H_6M", "L_6M", "%_6M",
         ]
     ].copy()
 
-    # Sort by 3D percentage change descending
-    analysis = analysis.sort_values(by="P_3D", ascending=False)
+    # Sort by 24H % descending
+    analysis = analysis.sort_values(by="%_24H", ascending=False)
 
-    # --- Smart formatting for prices ---
+    # --- Formatting ---
     def smart_format(val):
         try:
             val = float(val)
@@ -119,7 +114,6 @@ if results:
         except:
             return ""
 
-    # --- Conditional color for average ---
     def color_avg(val, current):
         try:
             val = float(val)
@@ -129,12 +123,12 @@ if results:
         except:
             return ""
 
-    # --- Build style ---
+    # --- Styling ---
     styled_df = (
         analysis.style.format(
-            {col: smart_format for col in analysis.columns if not col.startswith("P_")}
+            {col: smart_format for col in analysis.columns if not col.startswith("%_")}
         )
-        .format({col: format_percent for col in analysis.columns if col.startswith("P_")})
+        .format({col: format_percent for col in analysis.columns if col.startswith("%_")})
         .apply(
             lambda row: [
                 color_avg(row[col], row["Current"]) if col.startswith("A_") else ""
@@ -144,53 +138,50 @@ if results:
         )
         .set_table_styles(
             [
-                {
-                    "selector": "thead th",
-                    "props": [("background-color", "#0e1117"), ("color", "white"), ("font-weight", "bold")],
-                },
-                {"selector": "th", "props": [("border", "1px solid #444")]},
-                {"selector": "td", "props": [("border", "1px solid #444")]},
+                {"selector": "thead th", "props": [("background-color", "#111827"), ("color", "white"), ("font-weight", "bold")]},
+                {"selector": "th", "props": [("border", "1px solid #555")]},
+                {"selector": "td", "props": [("border", "1px solid #333")]},
             ]
         )
     )
 
-    # --- Add thicker borders to differentiate sections ---
+    # --- Add thicker borders between duration groups ---
     borders = ["24H", "3D", "1W", "1M", "2M", "6M"]
     for label in borders:
         styled_df = styled_df.set_table_styles(
             [
                 {
-                    "selector": f"th.col_heading.level0.col{analysis.columns.get_loc('P_'+label)}",
-                    "props": [("border-right", "3px solid #555")],
+                    "selector": f"th.col_heading.level0.col{analysis.columns.get_loc('%_'+label)}",
+                    "props": [("border-right", "3px solid #777")],
                 },
                 {
-                    "selector": f"td.col{analysis.columns.get_loc('P_'+label)}",
-                    "props": [("border-right", "3px solid #555")],
+                    "selector": f"td.col{analysis.columns.get_loc('%_'+label)}",
+                    "props": [("border-right", "3px solid #777")],
                 },
             ],
             overwrite=False,
         )
 
-    # --- Display ---
-    st.subheader("📋 Multi-Period High / Average / Low + % Change Table (Sorted by 3D % Change)")
+    # --- Display Table ---
+    st.subheader("📋 Multi-Period Averages / High / Low / % Change Table (Sorted by 24H %)")
     st.dataframe(styled_df, use_container_width=True)
 
-    # --- Freeze top row & rightmost column ---
+    # --- Freeze first column & header ---
     st.markdown(
         """
         <style>
         [data-testid="stDataFrame"] th {
             position: sticky;
             top: 0;
-            background: #0e1117;
+            background: #111827;
             z-index: 2;
         }
-        [data-testid="stDataFrame"] td:last-child,
-        [data-testid="stDataFrame"] th:last-child {
+        [data-testid="stDataFrame"] td:first-child,
+        [data-testid="stDataFrame"] th:first-child {
             position: sticky;
-            right: 0;
-            background: #0e1117;
-            z-index: 1;
+            left: 0;
+            background: #111827;
+            z-index: 3;
         }
         </style>
         """,
