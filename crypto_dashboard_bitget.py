@@ -4,21 +4,20 @@ import ccxt
 import json
 from streamlit_autorefresh import st_autorefresh
 
-st.set_page_config(page_title="Crypto Dashboard & Analysis", layout="wide")
+st.set_page_config(page_title="Crypto Average Price Dashboard", layout="wide")
 
-# 🔄 Auto-refresh every 5 minutes
+# Auto-refresh every 5 minutes
 st_autorefresh(interval=300000, key="crypto_refresh")
 
 # Load coin list
 with open("coins.json") as f:
     COINS = json.load(f)
 
-# Bitget exchange
 exchange = ccxt.bitget({"enableRateLimit": True})
 
-st.title("📊 Crypto Dashboard — High/Low/Average & % Change")
+st.title("📊 Crypto Dashboard — Average Prices & % Changes")
 
-# --- Fetch OHLCV (Daily for long history) ---
+
 def fetch_ohlcv(symbol, timeframe="1d", limit=1500):
     try:
         data = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
@@ -31,62 +30,51 @@ def fetch_ohlcv(symbol, timeframe="1d", limit=1500):
         return None
 
 
-# --- Compute Stats ---
 def compute_stats(symbol):
-    df_daily = fetch_ohlcv(symbol, timeframe="1d", limit=1500)
-    if df_daily is None or df_daily.empty:
+    df = fetch_ohlcv(symbol, "1d", 1500)
+    if df is None or df.empty:
         return None
 
-    now = df_daily["close"].iloc[-1]
+    now = df["close"].iloc[-1]
 
-    periods_days = {
+    periods = {
         "24H": 1,
-        "3D": 3,
         "1W": 7,
         "1M": 30,
         "2M": 60,
         "6M": 180,
     }
 
-    stats = {"Current": now}
+    stats = {"Coin": symbol.split("/")[0], "Current": now}
 
-    for label, days in periods_days.items():
-        if len(df_daily) >= days:
-            sub = df_daily.tail(days)
-            stats[f"A_{label}"] = sub["close"].mean()
-            stats[f"H_{label}"] = sub["high"].max()
-            stats[f"L_{label}"] = sub["low"].min()
-            stats[f"P_{label}"] = ((stats[f"H_{label}"] - stats[f"L_{label}"]) / stats[f"L_{label}"]) * 100
+    # Ever averages
+    stats["Ever High"] = df["high"].max()
+    stats["Ever Low"] = df["low"].min()
+    stats["Avg Ever"] = df["close"].mean()
+
+    for label, days in periods.items():
+        if len(df) >= days:
+            sub = df.tail(days)
+            stats[f"High {label}"] = sub["high"].max()
+            stats[f"Low {label}"] = sub["low"].min()
+            stats[f"Avg {label}"] = sub["close"].mean()
+            stats[f"% Change {label}"] = ((sub["high"].max() - sub["low"].min()) / sub["low"].min()) * 100
         else:
-            stats[f"A_{label}"] = None
-            stats[f"H_{label}"] = None
-            stats[f"L_{label}"] = None
-            stats[f"P_{label}"] = None
-
-    stats["EH"] = df_daily["high"].max()
-    stats["EL"] = df_daily["low"].min()
-    stats["A_Ever"] = df_daily["close"].mean()
+            stats[f"High {label}"] = None
+            stats[f"Low {label}"] = None
+            stats[f"Avg {label}"] = None
+            stats[f"% Change {label}"] = None
 
     return stats
 
 
-# --- Collect Data ---
-results = []
+# Collect all data
+rows = []
 for coin in COINS:
-    symbol = coin.replace("USDT", "/USDT")
-    stats = compute_stats(symbol)
-    if stats is not None:
-        stats["Symbol"] = coin
-        results.append(stats)
+    sym = coin.replace("USDT", "/USDT")
+    data = compute_stats(sym)
+    if data:
+        rows.append(data)
 
-if results:
-    df = pd.DataFrame(results)
-
-    # --- Analysis Table ---
-    analysis = df[
-        [
-            "Symbol",
-            "Current",
-            "A_Ever", "EH", "EL",  # moved after Current
-            "H_24H", "L_24H", "P_24H",  # removed A_24H
-            "A_3D", "H_3D", "L_3D", "P_3D",
+if not rows:
+    st.error("⚠️ No data available. Check yo
