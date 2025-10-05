@@ -145,18 +145,18 @@ if results:
         )
     )
 
-    # --- Add thicker borders between duration groups ---
+    # --- Add thicker white borders between duration groups ---
     borders = ["24H", "3D", "1W", "1M", "2M", "6M"]
     for label in borders:
         styled_df = styled_df.set_table_styles(
             [
                 {
                     "selector": f"th.col_heading.level0.col{analysis.columns.get_loc('%_'+label)}",
-                    "props": [("border-right", "3px solid #777")],
+                    "props": [("border-right", "3px solid white")],
                 },
                 {
                     "selector": f"td.col{analysis.columns.get_loc('%_'+label)}",
-                    "props": [("border-right", "3px solid #777")],
+                    "props": [("border-right", "3px solid white")],
                 },
             ],
             overwrite=False,
@@ -170,18 +170,18 @@ if results:
     st.markdown(
         """
         <style>
-        [data-testid="stDataFrame"] th {
+        [data-testid="stDataFrame"] thead tr th {
             position: sticky;
             top: 0;
-            background: #111827;
-            z-index: 2;
+            z-index: 3;
+            background-color: #111827 !important;
         }
-        [data-testid="stDataFrame"] td:first-child,
-        [data-testid="stDataFrame"] th:first-child {
+        [data-testid="stDataFrame"] tbody tr td:first-child,
+        [data-testid="stDataFrame"] thead tr th:first-child {
             position: sticky;
             left: 0;
-            background: #111827;
-            z-index: 3;
+            z-index: 4;
+            background-color: #111827 !important;
         }
         </style>
         """,
