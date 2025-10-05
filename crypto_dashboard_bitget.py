@@ -161,18 +161,50 @@ if results:
             [
                 {
                     "selector": f"th.col_heading.level0.col{analysis.columns.get_loc('P_'+label)}",
-                    "props": [("border-right", "3px solid #555")],
+                    "props": [("border-right", "3px solid #666")],
                 },
                 {
                     "selector": f"td.col{analysis.columns.get_loc('P_'+label)}",
-                    "props": [("border-right", "3px solid #555")],
+                    "props": [("border-right", "3px solid #666")],
                 },
             ],
             overwrite=False,
         )
 
-    # --- Display ---
+    # --- Visual grouping by period ---
+    header_html = """
+    <style>
+    .period-header {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background-color: #222831;
+        color: #00c2ff;
+        font-weight: bold;
+        border: 2px solid #333;
+        border-radius: 5px;
+        padding: 4px;
+        margin: 2px 0;
+    }
+    </style>
+    """
+    st.markdown(header_html, unsafe_allow_html=True)
+
     st.subheader("📋 Multi-Period High / Average / Low + % Change Table (Sorted by 3D % Change)")
+    st.markdown(
+        """
+        <div style='display:flex; justify-content:space-around; flex-wrap:wrap;'>
+            <div class='period-header'>24H</div>
+            <div class='period-header'>3D</div>
+            <div class='period-header'>1W</div>
+            <div class='period-header'>1M</div>
+            <div class='period-header'>2M</div>
+            <div class='period-header'>6M</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     st.dataframe(styled_df, use_container_width=True)
 
     # --- Freeze top row & rightmost column ---
