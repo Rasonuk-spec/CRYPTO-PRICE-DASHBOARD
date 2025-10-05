@@ -4,20 +4,21 @@ import ccxt
 import json
 from streamlit_autorefresh import st_autorefresh
 
-st.set_page_config(page_title="Crypto Average Price Dashboard", layout="wide")
+st.set_page_config(page_title="Crypto Dashboard & Analysis", layout="wide")
 
-# Auto-refresh every 5 minutes
+# 🔄 Auto-refresh every 5 minutes
 st_autorefresh(interval=300000, key="crypto_refresh")
 
 # Load coin list
 with open("coins.json") as f:
     COINS = json.load(f)
 
+# Bitget exchange
 exchange = ccxt.bitget({"enableRateLimit": True})
 
-st.title("📊 Crypto Dashboard — Average Prices & % Changes")
+st.title("📊 Crypto Dashboard — High/Low/Average & % Change")
 
-
+# --- Fetch OHLCV (Daily for long history) ---
 def fetch_ohlcv(symbol, timeframe="1d", limit=1500):
     try:
         data = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
@@ -30,124 +31,179 @@ def fetch_ohlcv(symbol, timeframe="1d", limit=1500):
         return None
 
 
+# --- Compute Stats ---
 def compute_stats(symbol):
-    df = fetch_ohlcv(symbol, "1d", 1500)
-    if df is None or df.empty:
+    df_daily = fetch_ohlcv(symbol, timeframe="1d", limit=1500)
+    if df_daily is None or df_daily.empty:
         return None
 
-    now = df["close"].iloc[-1]
+    now = df_daily["close"].iloc[-1]
 
-    periods = {
+    periods_days = {
         "24H": 1,
+        "3D": 3,
         "1W": 7,
         "1M": 30,
         "2M": 60,
         "6M": 180,
     }
 
-    stats = {"Coin": symbol.split("/")[0], "Current": now}
+    stats = {"Current": now}
 
-    # Ever averages
-    stats["Ever High"] = df["high"].max()
-    stats["Ever Low"] = df["low"].min()
-    stats["Avg Ever"] = df["close"].mean()
-
-    for label, days in periods.items():
-        if len(df) >= days:
-            sub = df.tail(days)
-            stats[f"High {label}"] = sub["high"].max()
-            stats[f"Low {label}"] = sub["low"].min()
-            stats[f"Avg {label}"] = sub["close"].mean()
-            stats[f"% Change {label}"] = ((sub["high"].max() - sub["low"].min()) / sub["low"].min()) * 100
+    for label, days in periods_days.items():
+        if len(df_daily) >= days:
+            sub = df_daily.tail(days)
+            stats[f"A_{label}"] = sub["close"].mean()
+            stats[f"H_{label}"] = sub["high"].max()
+            stats[f"L_{label}"] = sub["low"].min()
+            stats[f"P_{label}"] = ((stats[f"H_{label}"] - stats[f"L_{label}"]) / stats[f"L_{label}"]) * 100
         else:
-            stats[f"High {label}"] = None
-            stats[f"Low {label}"] = None
-            stats[f"Avg {label}"] = None
-            stats[f"% Change {label}"] = None
+            stats[f"A_{label}"] = None
+            stats[f"H_{label}"] = None
+            stats[f"L_{label}"] = None
+            stats[f"P_{label}"] = None
+
+    stats["EH"] = df_daily["high"].max()
+    stats["EL"] = df_daily["low"].min()
+    stats["A_Ever"] = df_daily["close"].mean()
 
     return stats
 
 
-# Collect all data
-rows = []
+# --- Collect Data ---
+results = []
 for coin in COINS:
-    sym = coin.replace("USDT", "/USDT")
-    data = compute_stats(sym)
-    if data:
-        rows.append(data)
+    symbol = coin.replace("USDT", "/USDT")
+    stats = compute_stats(symbol)
+    if stats is not None:
+        stats["Symbol"] = coin
+        results.append(stats)
 
-if not rows:
-    st.error("⚠️ No data available. Check your coins.json or Bitget API limits.")
-    st.stop()
+if results:
+    df = pd.DataFrame(results)
 
-df = pd.DataFrame(rows)
+    # --- Analysis Table ---
+    analysis = df[
+        [
+            "Symbol",
+            "Current",
+            "A_24H", "H_24H", "L_24H", "P_24H",
+            "A_3D", "H_3D", "L_3D", "P_3D",
+            "A_1W", "H_1W", "L_1W", "P_1W",
+            "A_1M", "H_1M", "L_1M", "P_1M",
+            "A_2M", "H_2M", "L_2M", "P_2M",
+            "A_6M", "H_6M", "L_6M", "P_6M",
+            "A_Ever", "EH", "EL",
+        ]
+    ].copy()
 
-# Order columns
-ordered_cols = [
-    "Coin", "Current", "Ever High", "Ever Low", "Avg Ever",
-    "High 24H", "Avg 24H", "Low 24H", "% Change 24H",
-    "High 1W", "Avg 1W", "Low 1W", "% Change 1W",
-    "High 1M", "Avg 1M", "Low 1M", "% Change 1M",
-    "High 2M", "Avg 2M", "Low 2M", "% Change 2M",
-    "High 6M", "Avg 6M", "Low 6M", "% Change 6M",
-]
+    # Sort by 3D percentage change descending
+    analysis = analysis.sort_values(by="P_3D", ascending=False)
 
-df = df[ordered_cols]
+    # --- Smart formatting for prices ---
+    def smart_format(val):
+        try:
+            val = float(val)
+            if abs(val) < 1:
+                return f"{val:.8f}"
+            elif abs(val) < 100:
+                return f"{val:.6f}"
+            else:
+                return f"{val:.2f}"
+        except:
+            return val
 
-# Sort by 24H % change (descending)
-df = df.sort_values(by="% Change 24H", ascending=False)
+    def format_percent(val):
+        try:
+            return f"{val:.2f}%"
+        except:
+            return ""
 
-# Round numeric columns
-for c in df.columns:
-    if "% Change" in c:
-        df[c] = df[c].apply(lambda x: f"{x:.2f}%" if pd.notnull(x) else "")
-    elif c not in ["Coin"]:
-        df[c] = df[c].apply(lambda x: round(x, 6) if pd.notnull(x) else "")
+    # --- Conditional color for average ---
+    def color_avg(val, current):
+        try:
+            val = float(val)
+            current = float(current)
+            color = "green" if val > current else "red"
+            return f"color: {color}"
+        except:
+            return ""
 
-# Define column group coloring (alternating shades)
-col_colors = {
-    "24H": "#2a2a2a",
-    "1W": "#222233",
-    "1M": "#1f332f",
-    "2M": "#332222",
-    "6M": "#333333",
-    "Ever": "#252525",
-}
+    # --- Build style ---
+    styled_df = (
+        analysis.style.format(
+            {col: smart_format for col in analysis.columns if not col.startswith("P_")}
+        )
+        .format({col: format_percent for col in analysis.columns if col.startswith("P_")})
+        .apply(
+            lambda row: [
+                color_avg(row[col], row["Current"]) if col.startswith("A_") else ""
+                for col in analysis.columns
+            ],
+            axis=1,
+        )
+        .set_table_styles(
+            [
+                {
+                    "selector": "thead th",
+                    "props": [("background-color", "#0e1117"), ("color", "white"), ("font-weight", "bold")],
+                },
+                {"selector": "th", "props": [("border", "1px solid #444")]},
+                {"selector": "td", "props": [("border", "1px solid #444")]},
+            ]
+        )
+    )
 
-def highlight_cols(col):
-    for k, v in col_colors.items():
-        if k in col:
-            return [f"background-color: {v}; color: white;"] * len(df)
-    return [""] * len(df)
+    # --- Add thicker borders to differentiate sections ---
+    borders = ["24H", "3D", "1W", "1M", "2M", "6M"]
+    for label in borders:
+        styled_df = styled_df.set_table_styles(
+            [
+                {
+                    "selector": f"th.col_heading.level0.col{analysis.columns.get_loc('P_'+label)}",
+                    "props": [("border-right", "3px solid #555")],
+                },
+                {
+                    "selector": f"td.col{analysis.columns.get_loc('P_'+label)}",
+                    "props": [("border-right", "3px solid #555")],
+                },
+            ],
+            overwrite=False,
+        )
 
-styled = df.style.apply(highlight_cols, axis=0)
+    # --- Display ---
+    st.subheader("📋 Multi-Period High / Average / Low + % Change Table (Sorted by 3D % Change)")
+    st.dataframe(styled_df, use_container_width=True)
 
-# Display table
-st.dataframe(styled, use_container_width=True)
+    # --- Freeze top row & rightmost column ---
+    st.markdown(
+        """
+        <style>
+        [data-testid="stDataFrame"] th {
+            position: sticky;
+            top: 0;
+            background: #0e1117;
+            z-index: 2;
+        }
+        [data-testid="stDataFrame"] td:last-child,
+        [data-testid="stDataFrame"] th:last-child {
+            position: sticky;
+            right: 0;
+            background: #0e1117;
+            z-index: 1;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
-# Freeze header and coin column
-st.markdown("""
-<style>
-[data-testid="stDataFrame"] th {
-  position: sticky;
-  top: 0;
-  background-color: #111;
-  z-index: 1;
-}
-[data-testid="stDataFrame"] td:first-child,
-[data-testid="stDataFrame"] th:first-child {
-  position: sticky;
-  left: 0;
-  background-color: #000;
-  z-index: 2;
-}
-</style>
-""", unsafe_allow_html=True)
+    # --- CSV Export ---
+    st.download_button(
+        "📥 Download Analysis CSV",
+        analysis.to_csv(index=False).encode("utf-8"),
+        file_name="crypto_avg_change_analysis.csv",
+        mime="text/csv",
+    )
 
-# Export CSV
-st.download_button(
-    "📥 Download CSV",
-    df.to_csv(index=False).encode("utf-8"),
-    file_name="crypto_avg_dashboard.csv",
-    mime="text/csv"
-)
+else:
+    st.error("No data available. Check coins.json or Bitget symbols.")
