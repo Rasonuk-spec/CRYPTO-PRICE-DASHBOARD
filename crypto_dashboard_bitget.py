@@ -40,7 +40,6 @@ def compute_stats(symbol):
     now = df_daily["close"].iloc[-1]
 
     periods_days = {
-        "24H": 1,
         "3D": 3,
         "1W": 7,
         "1M": 30,
@@ -63,9 +62,10 @@ def compute_stats(symbol):
             stats[f"L_{label}"] = None
             stats[f"P_{label}"] = None
 
+    # Ever data
+    stats["A_Ever"] = df_daily["close"].mean()
     stats["EH"] = df_daily["high"].max()
     stats["EL"] = df_daily["low"].min()
-    stats["A_Ever"] = df_daily["close"].mean()
 
     return stats
 
@@ -82,18 +82,17 @@ for coin in COINS:
 if results:
     df = pd.DataFrame(results)
 
-    # --- Analysis Table ---
+    # --- Reordered Columns ---
     analysis = df[
         [
             "Symbol",
             "Current",
-            "A_24H", "H_24H", "L_24H", "P_24H",
+            "A_Ever", "EH", "EL",  # Ever columns after current
             "A_3D", "H_3D", "L_3D", "P_3D",
             "A_1W", "H_1W", "L_1W", "P_1W",
             "A_1M", "H_1M", "L_1M", "P_1M",
             "A_2M", "H_2M", "L_2M", "P_2M",
             "A_6M", "H_6M", "L_6M", "P_6M",
-            "A_Ever", "EH", "EL",
         ]
     ].copy()
 
@@ -144,32 +143,28 @@ if results:
         )
         .set_table_styles(
             [
-                {
-                    "selector": "thead th",
-                    "props": [("background-color", "#0e1117"), ("color", "white"), ("font-weight", "bold")],
-                },
+                {"selector": "thead th", "props": [("background-color", "#0e1117"), ("color", "white"), ("font-weight", "bold")]},
                 {"selector": "th", "props": [("border", "1px solid #444")]},
                 {"selector": "td", "props": [("border", "1px solid #444")]},
             ]
         )
     )
 
-    # --- Add thicker borders to differentiate sections ---
-    borders = ["24H", "3D", "1W", "1M", "2M", "6M"]
-    for label in borders:
-        styled_df = styled_df.set_table_styles(
-            [
-                {
-                    "selector": f"th.col_heading.level0.col{analysis.columns.get_loc('P_'+label)}",
-                    "props": [("border-right", "3px solid #555")],
-                },
-                {
-                    "selector": f"td.col{analysis.columns.get_loc('P_'+label)}",
-                    "props": [("border-right", "3px solid #555")],
-                },
-            ],
-            overwrite=False,
-        )
+    # --- Add thicker borders & background separators ---
+    sections = {
+        "Ever": ["A_Ever", "EH", "EL"],
+        "3D": ["A_3D", "H_3D", "L_3D", "P_3D"],
+        "1W": ["A_1W", "H_1W", "L_1W", "P_1W"],
+        "1M": ["A_1M", "H_1M", "L_1M", "P_1M"],
+        "2M": ["A_2M", "H_2M", "L_2M", "P_2M"],
+        "6M": ["A_6M", "H_6M", "L_6M", "P_6M"],
+    }
+
+    bg_colors = ["#1c1c1c", "#232323", "#1e2525", "#25201e", "#212126", "#282828"]
+
+    for i, (label, cols) in enumerate(sections.items()):
+        color = bg_colors[i % len(bg_colors)]
+        styled_df = styled_df.set_properties(subset=cols, **{"background-color": color})
 
     # --- Display ---
     st.subheader("📋 Multi-Period High / Average / Low + % Change Table (Sorted by 3D % Change)")
