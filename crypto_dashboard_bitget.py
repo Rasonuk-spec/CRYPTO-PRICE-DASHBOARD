@@ -87,13 +87,13 @@ if results:
         [
             "Symbol",
             "Current",
-            "A_24H", "H_24H", "L_24H", "P_24H",
+            "A_Ever", "EH", "EL",   # moved up here
+            "H_24H", "L_24H", "P_24H",  # 24H average removed
             "A_3D", "H_3D", "L_3D", "P_3D",
             "A_1W", "H_1W", "L_1W", "P_1W",
             "A_1M", "H_1M", "L_1M", "P_1M",
             "A_2M", "H_2M", "L_2M", "P_2M",
             "A_6M", "H_6M", "L_6M", "P_6M",
-            "A_Ever", "EH", "EL",
         ]
     ].copy()
 
@@ -117,125 +117,4 @@ if results:
         try:
             return f"{val:.2f}%"
         except:
-            return ""
-
-    # --- Conditional color for average ---
-    def color_avg(val, current):
-        try:
-            val = float(val)
-            current = float(current)
-            color = "green" if val > current else "red"
-            return f"color: {color}"
-        except:
-            return ""
-
-    # --- Build style ---
-    styled_df = (
-        analysis.style.format(
-            {col: smart_format for col in analysis.columns if not col.startswith("P_")}
-        )
-        .format({col: format_percent for col in analysis.columns if col.startswith("P_")})
-        .apply(
-            lambda row: [
-                color_avg(row[col], row["Current"]) if col.startswith("A_") else ""
-                for col in analysis.columns
-            ],
-            axis=1,
-        )
-        .set_table_styles(
-            [
-                {
-                    "selector": "thead th",
-                    "props": [("background-color", "#0e1117"), ("color", "white"), ("font-weight", "bold")],
-                },
-                {"selector": "th", "props": [("border", "1px solid #444")]},
-                {"selector": "td", "props": [("border", "1px solid #444")]},
-            ]
-        )
-    )
-
-    # --- Add thicker borders to differentiate sections ---
-    borders = ["24H", "3D", "1W", "1M", "2M", "6M"]
-    for label in borders:
-        styled_df = styled_df.set_table_styles(
-            [
-                {
-                    "selector": f"th.col_heading.level0.col{analysis.columns.get_loc('P_'+label)}",
-                    "props": [("border-right", "3px solid #666")],
-                },
-                {
-                    "selector": f"td.col{analysis.columns.get_loc('P_'+label)}",
-                    "props": [("border-right", "3px solid #666")],
-                },
-            ],
-            overwrite=False,
-        )
-
-    # --- Visual grouping by period ---
-    header_html = """
-    <style>
-    .period-header {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        background-color: #222831;
-        color: #00c2ff;
-        font-weight: bold;
-        border: 2px solid #333;
-        border-radius: 5px;
-        padding: 4px;
-        margin: 2px 0;
-    }
-    </style>
-    """
-    st.markdown(header_html, unsafe_allow_html=True)
-
-    st.subheader("📋 Multi-Period High / Average / Low + % Change Table (Sorted by 3D % Change)")
-    st.markdown(
-        """
-        <div style='display:flex; justify-content:space-around; flex-wrap:wrap;'>
-            <div class='period-header'>24H</div>
-            <div class='period-header'>3D</div>
-            <div class='period-header'>1W</div>
-            <div class='period-header'>1M</div>
-            <div class='period-header'>2M</div>
-            <div class='period-header'>6M</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.dataframe(styled_df, use_container_width=True)
-
-    # --- Freeze top row & rightmost column ---
-    st.markdown(
-        """
-        <style>
-        [data-testid="stDataFrame"] th {
-            position: sticky;
-            top: 0;
-            background: #0e1117;
-            z-index: 2;
-        }
-        [data-testid="stDataFrame"] td:last-child,
-        [data-testid="stDataFrame"] th:last-child {
-            position: sticky;
-            right: 0;
-            background: #0e1117;
-            z-index: 1;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # --- CSV Export ---
-    st.download_button(
-        "📥 Download Analysis CSV",
-        analysis.to_csv(index=False).encode("utf-8"),
-        file_name="crypto_avg_change_analysis.csv",
-        mime="text/csv",
-    )
-
-else:
-    st.error("No data available. Check coins.json or Bitget symbols.")
+            retur
