@@ -52,20 +52,18 @@ def compute_stats(symbol):
     for label, days in periods_days.items():
         if len(df_daily) >= days:
             sub = df_daily.tail(days)
-            stats[f"A_{label}"] = sub["close"].mean()
             stats[f"H_{label}"] = sub["high"].max()
             stats[f"L_{label}"] = sub["low"].min()
             stats[f"P_{label}"] = ((stats[f"H_{label}"] - stats[f"L_{label}"]) / stats[f"L_{label}"]) * 100
         else:
-            stats[f"A_{label}"] = None
             stats[f"H_{label}"] = None
             stats[f"L_{label}"] = None
             stats[f"P_{label}"] = None
 
-    # Ever data
-    stats["A_Ever"] = df_daily["close"].mean()
+    # Ever high/low/average
     stats["EH"] = df_daily["high"].max()
     stats["EL"] = df_daily["low"].min()
+    stats["A_Ever"] = df_daily["close"].mean()
 
     return stats
 
@@ -82,24 +80,24 @@ for coin in COINS:
 if results:
     df = pd.DataFrame(results)
 
-    # --- Reordered Columns ---
+    # --- Analysis Table ---
     analysis = df[
         [
             "Symbol",
             "Current",
-            "A_Ever", "EH", "EL",  # Ever columns after current
-            "A_3D", "H_3D", "L_3D", "P_3D",
-            "A_1W", "H_1W", "L_1W", "P_1W",
-            "A_1M", "H_1M", "L_1M", "P_1M",
-            "A_2M", "H_2M", "L_2M", "P_2M",
-            "A_6M", "H_6M", "L_6M", "P_6M",
+            "A_Ever", "EH", "EL",  # Moved here
+            "H_3D", "L_3D", "P_3D",
+            "H_1W", "L_1W", "P_1W",
+            "H_1M", "L_1M", "P_1M",
+            "H_2M", "L_2M", "P_2M",
+            "H_6M", "L_6M", "P_6M",
         ]
     ].copy()
 
     # Sort by 3D percentage change descending
     analysis = analysis.sort_values(by="P_3D", ascending=False)
 
-    # --- Smart formatting for prices ---
+    # --- Smart formatting ---
     def smart_format(val):
         try:
             val = float(val)
@@ -118,74 +116,70 @@ if results:
         except:
             return ""
 
-    # --- Conditional color for average ---
-    def color_avg(val, current):
-        try:
-            val = float(val)
-            current = float(current)
-            color = "green" if val > current else "red"
-            return f"color: {color}"
-        except:
-            return ""
-
     # --- Build style ---
     styled_df = (
         analysis.style.format(
             {col: smart_format for col in analysis.columns if not col.startswith("P_")}
         )
         .format({col: format_percent for col in analysis.columns if col.startswith("P_")})
-        .apply(
-            lambda row: [
-                color_avg(row[col], row["Current"]) if col.startswith("A_") else ""
-                for col in analysis.columns
-            ],
-            axis=1,
-        )
         .set_table_styles(
             [
-                {"selector": "thead th", "props": [("background-color", "#0e1117"), ("color", "white"), ("font-weight", "bold")]},
-                {"selector": "th", "props": [("border", "1px solid #444")]},
-                {"selector": "td", "props": [("border", "1px solid #444")]},
+                # Header
+                {
+                    "selector": "thead th",
+                    "props": [
+                        ("background-color", "#f0f2f6"),
+                        ("color", "#000"),
+                        ("font-weight", "bold"),
+                        ("text-align", "center"),
+                        ("border", "1px solid #ccc"),
+                    ],
+                },
+                # Table cells
+                {
+                    "selector": "td",
+                    "props": [
+                        ("border", "1px solid #ccc"),
+                        ("background-color", "#ffffff"),
+                        ("color", "#000"),
+                        ("text-align", "center"),
+                    ],
+                },
             ]
         )
     )
 
-    # --- Add thicker borders & background separators ---
-    sections = {
-        "Ever": ["A_Ever", "EH", "EL"],
-        "3D": ["A_3D", "H_3D", "L_3D", "P_3D"],
-        "1W": ["A_1W", "H_1W", "L_1W", "P_1W"],
-        "1M": ["A_1M", "H_1M", "L_1M", "P_1M"],
-        "2M": ["A_2M", "H_2M", "L_2M", "P_2M"],
-        "6M": ["A_6M", "H_6M", "L_6M", "P_6M"],
-    }
+    # --- Section borders for readability ---
+    borders = ["3D", "1W", "1M", "2M", "6M"]
+    for label in borders:
+        styled_df = styled_df.set_table_styles(
+            [
+                {
+                    "selector": f"th.col_heading.level0.col{analysis.columns.get_loc('P_'+label)}",
+                    "props": [("border-right", "3px solid #888")],
+                },
+                {
+                    "selector": f"td.col{analysis.columns.get_loc('P_'+label)}",
+                    "props": [("border-right", "3px solid #888")],
+                },
+            ],
+            overwrite=False,
+        )
 
-    bg_colors = ["#1c1c1c", "#232323", "#1e2525", "#25201e", "#212126", "#282828"]
+    # --- Display Table ---
+    st.subheader("📋 Multi-Period High / Low + % Change Table (Sorted by 3D % Change)")
+    st.dataframe(styled_df, use_container_width=True, height=700)
 
-    for i, (label, cols) in enumerate(sections.items()):
-        color = bg_colors[i % len(bg_colors)]
-        styled_df = styled_df.set_properties(subset=cols, **{"background-color": color})
-
-    # --- Display ---
-    st.subheader("📋 Multi-Period High / Average / Low + % Change Table (Sorted by 3D % Change)")
-    st.dataframe(styled_df, use_container_width=True)
-
-    # --- Freeze top row & rightmost column ---
+    # --- Sticky header ---
     st.markdown(
         """
         <style>
         [data-testid="stDataFrame"] th {
             position: sticky;
             top: 0;
-            background: #0e1117;
+            background: #f0f2f6 !important;
+            color: #000 !important;
             z-index: 2;
-        }
-        [data-testid="stDataFrame"] td:last-child,
-        [data-testid="stDataFrame"] th:last-child {
-            position: sticky;
-            right: 0;
-            background: #0e1117;
-            z-index: 1;
         }
         </style>
         """,
@@ -196,9 +190,9 @@ if results:
     st.download_button(
         "📥 Download Analysis CSV",
         analysis.to_csv(index=False).encode("utf-8"),
-        file_name="crypto_avg_change_analysis.csv",
+        file_name="crypto_high_low_analysis.csv",
         mime="text/csv",
     )
 
 else:
-    st.error("No data available. Check coins.json or Bitget symbols.")
+    st.error("⚠️ No data available. Check coins.json or Bitget symbols.")
