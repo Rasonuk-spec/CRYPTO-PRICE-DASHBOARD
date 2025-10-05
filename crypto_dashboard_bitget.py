@@ -145,18 +145,18 @@ if results:
         )
     )
 
-    # --- Add thicker white borders between duration groups ---
+    # --- Add visible light borders between duration groups ---
     borders = ["24H", "3D", "1W", "1M", "2M", "6M"]
     for label in borders:
         styled_df = styled_df.set_table_styles(
             [
                 {
                     "selector": f"th.col_heading.level0.col{analysis.columns.get_loc('%_'+label)}",
-                    "props": [("border-right", "3px solid white")],
+                    "props": [("border-right", "3px solid #aaa")],
                 },
                 {
                     "selector": f"td.col{analysis.columns.get_loc('%_'+label)}",
-                    "props": [("border-right", "3px solid white")],
+                    "props": [("border-right", "3px solid #aaa")],
                 },
             ],
             overwrite=False,
@@ -166,22 +166,26 @@ if results:
     st.subheader("📋 Multi-Period Averages / High / Low / % Change Table (Sorted by 24H %)")
     st.dataframe(styled_df, use_container_width=True)
 
-    # --- Freeze first column & header ---
+    # --- Freeze first column & header (symbol + title row) ---
     st.markdown(
         """
         <style>
-        [data-testid="stDataFrame"] thead tr th {
-            position: sticky;
+        /* Sticky header */
+        [data-testid="stDataFrame"] table thead tr th {
+            position: sticky !important;
             top: 0;
+            background-color: #111827 !important;
             z-index: 3;
-            background-color: #111827 !important;
         }
-        [data-testid="stDataFrame"] tbody tr td:first-child,
-        [data-testid="stDataFrame"] thead tr th:first-child {
-            position: sticky;
+
+        /* Sticky first column (Symbol) */
+        [data-testid="stDataFrame"] table tbody tr td:first-child,
+        [data-testid="stDataFrame"] table thead tr th:first-child {
+            position: sticky !important;
             left: 0;
-            z-index: 4;
             background-color: #111827 !important;
+            z-index: 4;
+            border-right: 2px solid #aaa !important;
         }
         </style>
         """,
