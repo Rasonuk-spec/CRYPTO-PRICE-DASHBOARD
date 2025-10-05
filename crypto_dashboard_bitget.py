@@ -4,21 +4,16 @@ import ccxt
 import json
 from streamlit_autorefresh import st_autorefresh
 
-st.set_page_config(page_title="Crypto Dashboard & Analysis", layout="wide")
-
-# 🔄 Auto-refresh every 5 minutes
+st.set_page_config(page_title="Crypto Dashboard — Averages & % Change", layout="wide")
 st_autorefresh(interval=300000, key="crypto_refresh")
 
 # Load coin list
 with open("coins.json") as f:
     COINS = json.load(f)
 
-# Bitget exchange
 exchange = ccxt.bitget({"enableRateLimit": True})
+st.title("📊 Crypto Dashboard — Multi-Period Averages, Highs, Lows & % Change")
 
-st.title("📊 Crypto Dashboard — High/Low/Average & % Change")
-
-# --- Fetch OHLCV ---
 def fetch_ohlcv(symbol, timeframe="1d", limit=1500):
     try:
         data = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
@@ -28,177 +23,116 @@ def fetch_ohlcv(symbol, timeframe="1d", limit=1500):
     except Exception:
         return None
 
-# --- Compute Stats ---
 def compute_stats(symbol):
-    df_daily = fetch_ohlcv(symbol, timeframe="1d", limit=1500)
-    if df_daily is None or df_daily.empty:
+    df = fetch_ohlcv(symbol, timeframe="1d", limit=1500)
+    if df is None or df.empty:
         return None
 
-    now = df_daily["close"].iloc[-1]
+    current = df["close"].iloc[-1]
+    periods = {"24H": 1, "3D": 3, "1W": 7, "1M": 30, "2M": 60, "6M": 180}
+    stats = {"Symbol": symbol.replace("/USDT", ""), "Current": current}
 
-    periods_days = {
-        "24H": 1,
-        "3D": 3,
-        "1W": 7,
-        "1M": 30,
-        "2M": 60,
-        "6M": 180,
-    }
-
-    stats = {"Current": now}
-
-    for label, days in periods_days.items():
-        if len(df_daily) >= days:
-            sub = df_daily.tail(days)
-            stats[f"A_{label}"] = sub["close"].mean()
-            stats[f"H_{label}"] = sub["high"].max()
-            stats[f"L_{label}"] = sub["low"].min()
-            stats[f"%_{label}"] = ((stats[f"H_{label}"] - stats[f"L_{label}"]) / stats[f"L_{label}"]) * 100
+    for label, days in periods.items():
+        if len(df) >= days:
+            subset = df.tail(days)
+            high = subset["high"].max()
+            low = subset["low"].min()
+            avg = subset["close"].mean()
+            pct = ((high - low) / low) * 100
+            stats[f"Avg_{label}"] = avg
+            stats[f"High_{label}"] = high
+            stats[f"Low_{label}"] = low
+            stats[f"Change_{label}"] = pct
         else:
-            stats[f"A_{label}"] = None
-            stats[f"H_{label}"] = None
-            stats[f"L_{label}"] = None
-            stats[f"%_{label}"] = None
+            stats[f"Avg_{label}"] = stats[f"High_{label}"] = stats[f"Low_{label}"] = stats[f"Change_{label}"] = None
 
-    stats["EH"] = df_daily["high"].max()
-    stats["EL"] = df_daily["low"].min()
-    stats["A_Ever"] = df_daily["close"].mean()
-
+    stats["Ever_Avg"] = df["close"].mean()
+    stats["Ever_High"] = df["high"].max()
+    stats["Ever_Low"] = df["low"].min()
     return stats
 
-# --- Collect Data ---
 results = []
 for coin in COINS:
-    symbol = coin.replace("USDT", "/USDT")
-    stats = compute_stats(symbol)
-    if stats is not None:
-        stats["Symbol"] = coin
-        results.append(stats)
+    data = compute_stats(coin.replace("USDT", "/USDT"))
+    if data:
+        results.append(data)
 
-if results:
-    df = pd.DataFrame(results)
-
-    # --- Table Layout (Ever columns right after Current)
-    analysis = df[
-        [
-            "Symbol",
-            "Current", "A_Ever", "EH", "EL",
-            "A_24H", "H_24H", "L_24H", "%_24H",
-            "A_3D", "H_3D", "L_3D", "%_3D",
-            "A_1W", "H_1W", "L_1W", "%_1W",
-            "A_1M", "H_1M", "L_1M", "%_1M",
-            "A_2M", "H_2M", "L_2M", "%_2M",
-            "A_6M", "H_6M", "L_6M", "%_6M",
-        ]
-    ].copy()
-
-    # Sort by 24H % descending
-    analysis = analysis.sort_values(by="%_24H", ascending=False)
-
-    # --- Formatting ---
-    def smart_format(val):
-        try:
-            val = float(val)
-            if abs(val) < 1:
-                return f"{val:.8f}"
-            elif abs(val) < 100:
-                return f"{val:.6f}"
-            else:
-                return f"{val:.2f}"
-        except:
-            return val
-
-    def format_percent(val):
-        try:
-            return f"{val:.2f}%"
-        except:
-            return ""
-
-    def color_avg(val, current):
-        try:
-            val = float(val)
-            current = float(current)
-            color = "green" if val > current else "red"
-            return f"color: {color}"
-        except:
-            return ""
-
-    # --- Styling ---
-    styled_df = (
-        analysis.style.format(
-            {col: smart_format for col in analysis.columns if not col.startswith("%_")}
-        )
-        .format({col: format_percent for col in analysis.columns if col.startswith("%_")})
-        .apply(
-            lambda row: [
-                color_avg(row[col], row["Current"]) if col.startswith("A_") else ""
-                for col in analysis.columns
-            ],
-            axis=1,
-        )
-        .set_table_styles(
-            [
-                {"selector": "thead th", "props": [("background-color", "#111827"), ("color", "white"), ("font-weight", "bold")]},
-                {"selector": "th", "props": [("border", "1px solid #555")]},
-                {"selector": "td", "props": [("border", "1px solid #333")]},
-            ]
-        )
-    )
-
-    # --- Add visible light borders between duration groups ---
-    borders = ["24H", "3D", "1W", "1M", "2M", "6M"]
-    for label in borders:
-        styled_df = styled_df.set_table_styles(
-            [
-                {
-                    "selector": f"th.col_heading.level0.col{analysis.columns.get_loc('%_'+label)}",
-                    "props": [("border-right", "3px solid #aaa")],
-                },
-                {
-                    "selector": f"td.col{analysis.columns.get_loc('%_'+label)}",
-                    "props": [("border-right", "3px solid #aaa")],
-                },
-            ],
-            overwrite=False,
-        )
-
-    # --- Display Table ---
-    st.subheader("📋 Multi-Period Averages / High / Low / % Change Table (Sorted by 24H %)")
-    st.dataframe(styled_df, use_container_width=True)
-
-    # --- Freeze first column & header (symbol + title row) ---
-    st.markdown(
-        """
-        <style>
-        /* Sticky header */
-        [data-testid="stDataFrame"] table thead tr th {
-            position: sticky !important;
-            top: 0;
-            background-color: #111827 !important;
-            z-index: 3;
-        }
-
-        /* Sticky first column (Symbol) */
-        [data-testid="stDataFrame"] table tbody tr td:first-child,
-        [data-testid="stDataFrame"] table thead tr th:first-child {
-            position: sticky !important;
-            left: 0;
-            background-color: #111827 !important;
-            z-index: 4;
-            border-right: 2px solid #aaa !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # --- CSV Export ---
-    st.download_button(
-        "📥 Download Analysis CSV",
-        analysis.to_csv(index=False).encode("utf-8"),
-        file_name="crypto_avg_change_analysis.csv",
-        mime="text/csv",
-    )
-
+if not results:
+    st.error("No data available. Please check your internet connection or coins.json.")
 else:
-    st.error("No data available. Check coins.json or Bitget symbols.")
+    df = pd.DataFrame(results)
+    # 🔽 Sort by 3-Day % Change descending
+    df = df.sort_values(by="Change_3D", ascending=False)
+
+    # --- Build HTML Table ---
+    html = """
+    <style>
+    table {
+        border-collapse: collapse;
+        width: 100%;
+        font-family: 'Segoe UI', sans-serif;
+        font-size: 13px;
+    }
+    th, td {
+        border: 1px solid #444;
+        padding: 6px 10px;
+        text-align: right;
+    }
+    th {
+        position: sticky;
+        top: 0;
+        background: #111827;
+        color: white;
+        z-index: 2;
+    }
+    tr:nth-child(even) {background-color: #1e293b;}
+    tr:nth-child(odd) {background-color: #0f172a;}
+    td:first-child, th:first-child {
+        position: sticky;
+        left: 0;
+        background: #111827;
+        color: #fff;
+        text-align: left;
+        z-index: 3;
+    }
+    /* Separate duration groups clearly */
+    td.group_end, th.group_end {
+        border-right: 3px solid #999;
+    }
+    </style>
+    <table>
+      <thead>
+        <tr>
+          <th>Symbol</th>
+          <th>Current</th>
+          <th>Ever Avg</th><th>Ever High</th><th>Ever Low</th>
+          <th>Avg 24H</th><th>High 24H</th><th>Low 24H</th><th class="group_end">%Ch 24H</th>
+          <th>Avg 3D</th><th>High 3D</th><th>Low 3D</th><th class="group_end">%Ch 3D</th>
+          <th>Avg 1W</th><th>High 1W</th><th>Low 1W</th><th class="group_end">%Ch 1W</th>
+          <th>Avg 1M</th><th>High 1M</th><th>Low 1M</th><th class="group_end">%Ch 1M</th>
+          <th>Avg 2M</th><th>High 2M</th><th>Low 2M</th><th class="group_end">%Ch 2M</th>
+          <th>Avg 6M</th><th>High 6M</th><th>Low 6M</th><th class="group_end">%Ch 6M</th>
+        </tr>
+      </thead>
+      <tbody>
+    """
+
+    for _, row in df.iterrows():
+        html += f"""
+        <tr>
+          <td>{row['Symbol']}</td>
+          <td>{row['Current']:.4f}</td>
+          <td>{row['Ever_Avg']:.4f}</td><td>{row['Ever_High']:.4f}</td><td>{row['Ever_Low']:.4f}</td>
+          <td>{row['Avg_24H']:.4f}</td><td>{row['High_24H']:.4f}</td><td>{row['Low_24H']:.4f}</td><td class="group_end">{row['Change_24H']:.2f}%</td>
+          <td>{row['Avg_3D']:.4f}</td><td>{row['High_3D']:.4f}</td><td>{row['Low_3D']:.4f}</td><td class="group_end">{row['Change_3D']:.2f}%</td>
+          <td>{row['Avg_1W']:.4f}</td><td>{row['High_1W']:.4f}</td><td>{row['Low_1W']:.4f}</td><td class="group_end">{row['Change_1W']:.2f}%</td>
+          <td>{row['Avg_1M']:.4f}</td><td>{row['High_1M']:.4f}</td><td>{row['Low_1M']:.4f}</td><td class="group_end">{row['Change_1M']:.2f}%</td>
+          <td>{row['Avg_2M']:.4f}</td><td>{row['High_2M']:.4f}</td><td>{row['Low_2M']:.4f}</td><td class="group_end">{row['Change_2M']:.2f}%</td>
+          <td>{row['Avg_6M']:.4f}</td><td>{row['High_6M']:.4f}</td><td>{row['Low_6M']:.4f}</td><td class="group_end">{row['Change_6M']:.2f}%</td>
+        </tr>
+        """
+
+    html += "</tbody></table>"
+
+    st.markdown(html, unsafe_allow_html=True)
+    st.download_button("📥 Download CSV", df.to_csv(index=False).encode("utf-8"), file_name="crypto_avg_change_table.csv")
